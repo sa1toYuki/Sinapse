@@ -13,6 +13,12 @@ npm run dev
 
 Abra o endereço exibido pelo Vite. Para conferir a versão de produção localmente, execute `npm run build` e `npm run preview`.
 
+## Layout responsivo e validação
+
+O layout respeita o zoom do navegador e usa `min-height: 100dvh`, tokens em `rem` e espaços fluidos. No Multi touch, cada jogador tem suas próprias alternativas, identificadas pelo nome e pelas cores dourada/azul.
+
+Execute `npm test` para a matriz de telas e `npm run test:zoom` para zoom real de 100% a 400% em perfis temporários do Edge. Consulte o [relatório de responsividade](docs/responsividade.md) para os breakpoints, regras removidas, resultados e instruções de reprodução.
+
 ## Editar o conteúdo
 
 - `src/data/questions.ts`: 17 perguntas, cinco opções fixas, resposta, explicação e fonte. Preserve a ordem e os IDs; a dificuldade é definida por `level`.
