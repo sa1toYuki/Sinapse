@@ -2,6 +2,8 @@ import { Readable } from 'node:stream';
 import { defineConfig, type Connect } from 'vite';
 import { gradeLocal } from './worker/local-grade';
 
+const workerUrl = process.env.SINAPSE_DEV_WORKER_URL;
+
 const localGrade: Connect.NextHandleFunction = async (req, res, next) => {
   if (req.url !== '/api/local/grade' || req.method !== 'POST') return next();
   const body = Readable.toWeb(req) as ReadableStream<Uint8Array>;
@@ -27,5 +29,12 @@ export default defineConfig({
       }
     },
   }],
-  server: { fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/worker/**'] } },
+  server: {
+    fs: { deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/worker/**'] },
+    proxy: workerUrl ? {
+      // Keep the browser's Host and Origin so the Worker can enforce same-origin requests.
+      '/api/rooms': { target: workerUrl, ws: true },
+      '/api/ranking': { target: workerUrl },
+    } : undefined,
+  },
 });

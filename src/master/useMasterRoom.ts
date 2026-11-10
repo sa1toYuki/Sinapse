@@ -214,17 +214,27 @@ export function useMasterRoom() {
     if (creating) return;
     setCreating(true);
     setError('');
+    let status: number | null = null;
+    let code = 'NETWORK_ERROR';
     try {
       const response = await fetch('/api/rooms', { method: 'POST', signal: AbortSignal.timeout(8000) });
-      if (!response.ok) throw new Error('Room creation failed');
-      const room: unknown = await response.json();
-      if (!validCredentials(room)) throw new Error('Invalid credentials');
+      status = response.status;
+      code = response.ok ? 'INVALID_RESPONSE' : 'HTTP_ERROR';
+      const room: unknown = await response.json().catch(() => null);
+      if (!response.ok || !validCredentials(room)) {
+        if (room && typeof room === 'object' && 'code' in room && typeof room.code === 'string') code = room.code;
+        throw new Error('Room creation failed');
+      }
       storeCredentials(room);
       clearCommand();
       setView(null);
       setConnection('connecting');
       setCredentials(room);
-    } catch { setError('Falha ao criar sala.'); }
+    } catch (cause) {
+      if (cause instanceof DOMException && cause.name === 'TimeoutError') code = 'TIMEOUT';
+      console.error('Falha ao criar sala.', { status, code });
+      setError('Falha ao criar sala.');
+    }
     finally { setCreating(false); }
   }
 

@@ -10,6 +10,7 @@
   "d1_databases": [{
     "binding": "DB",
     "database_name": "sinapse",
+    // Placeholder para desenvolvimento local. Para publicar, copie o ID de `wrangler d1 create sinapse`.
     "database_id": "00000000-0000-0000-0000-000000000000",
     "migrations_dir": "migrations"
   }],

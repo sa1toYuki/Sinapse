@@ -11,9 +11,9 @@ npm install
 npm run dev
 ```
 
-Abra o endereço exibido pelo Vite para jogar os modos solo e dois jogadores no mesmo dispositivo. Esses modos usam a correção do servidor Vite, inclusive com `npm run build` e `npm run preview`.
+O comando aplica as migrações do D1 local, inicia o Worker e abre o servidor Vite com recarregamento automático. Abra a URL do **Vite** (normalmente `http://localhost:5173`). As chamadas da sala, os WebSockets e o ranking passam pelo Worker na mesma origem que a página. Para testar com um celular na mesma rede, abra a URL **Network** do Vite no computador antes de gerar o QR code.
 
-Para rodar a API das salas com D1 local:
+Para testar o Worker sozinho com o frontend compilado:
 
 ```bash
 npx wrangler d1 migrations apply DB --local
@@ -22,7 +22,7 @@ npm run dev:worker
 
 `POST /api/rooms` com corpo vazio retorna `{ pin, masterToken }`. Abra `GET /api/rooms/<pin>/ws` com upgrade WebSocket e `Origin` da aplicação. Envie `master.resume` com o segredo do MASTER ou `player.join` com PIN e nome. `player.resume` usa o `playerId` e o `reconnectToken` retornados na entrada. O [protocolo JSON](SPEC.md#6-protocolo-json-v1) detalha as mensagens.
 
-Abra **Sala ao vivo** no menu servido pelo Worker, ou acesse `/?master=1`, para controlar a partida no telão. No celular, escaneie o QR code para abrir a tela PLAYER com o PIN preenchido (`/?pin=<pin>`) ou use **Entrar na sala** (`/?player=1`). O navegador guarda o token da última sala em `localStorage` para retomar a sessão. Os modos locais funcionam no Vite dev/preview. A correção de prática fica no Vite para preservar o gabarito das salas públicas.
+Abra **Sala ao vivo** no menu ou acesse `/?master=1` para controlar a partida no telão. No celular, escaneie o QR code para abrir a tela PLAYER com o PIN preenchido (`/?pin=<pin>`) ou use **Entrar na sala** (`/?player=1`). O navegador guarda o token da última sala em `localStorage` para retomar a sessão. Os modos solo e de dois jogadores usam a correção de prática do Vite e também funcionam com `npm run build` e `npm run preview`.
 
 O MASTER mostra a classificação completa quando o D1 confirma a gravação. `/ranking` exibe a última partida concluída e o link **Ranking público** no pódio abre o resultado daquela partida. A classificação mostra o tempo acumulado em `MM:SS` e usa milissegundos no desempate.
 
@@ -35,6 +35,8 @@ Execute `npm test` para a matriz de telas e `npm run test:zoom` para zoom real d
 `npm run test:worker` compila o projeto e roda os testes de regras e integração no Workerd, com Durable Objects, WebSockets e D1 locais. O pool precisa de acesso à rede de loopback.
 
 `npm run test:master` testa o MASTER em dois tamanhos de tela e o fluxo PLAYER no celular, com entrada, remoção, resposta e reconexão pelo Worker local.
+
+`npm run test:smoke` usa `npm run dev` com um banco local novo. No navegador, cria uma sala pelo menu, entra como PLAYER pelo link do QR code e inicia a primeira pergunta. Também consulta o ranking para confirmar que as migrações foram aplicadas.
 
 ### Carga de sala
 
@@ -55,7 +57,12 @@ Consulte as [medições e a comparação antes/depois](docs/carga.md).
 
 ## Configurar o Worker para publicação
 
-Crie o banco `sinapse` no D1 e substitua o `database_id` de exemplo em `wrangler.jsonc` pelo ID do banco. Aplique `npx wrangler d1 migrations apply DB --remote`, faça `npm run build` e publique com `npx wrangler deploy`. O upgrade aceita a origem do próprio Worker. Para upgrades iniciados em outro domínio, configure `ALLOWED_ORIGINS` com as origens exatas separadas por vírgula.
+1. Crie o banco com `npx wrangler d1 create sinapse`.
+2. Copie o `database_id` retornado para o binding `DB` em `wrangler.jsonc`, no lugar do placeholder `00000000-0000-0000-0000-000000000000`.
+3. Aplique as migrações com `npx wrangler d1 migrations apply DB --remote`.
+4. Publique com `npm run deploy`. O `predeploy` valida a configuração antes do build e de `wrangler deploy`. Use esse comando também na integração com a Cloudflare para executar a validação.
+
+O upgrade aceita a origem do próprio Worker. Para upgrades iniciados em outro domínio, configure `ALLOWED_ORIGINS` com as origens exatas separadas por vírgula.
 
 ## Salvar e retomar
 

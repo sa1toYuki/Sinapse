@@ -3,14 +3,17 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "dev": "node scripts/dev.mjs",
     "build": "tsc -b && tsc -p tsconfig.worker.json && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "playwright test",
     "test:master": "playwright test --config playwright.master.config.ts",
+    "test:smoke": "playwright test --config playwright.smoke.config.ts",
     "test:worker": "npm run build && vitest run",
     "test:load": "node scripts/load-room.mjs",
     "dev:worker": "npm run build && wrangler dev --local",
+    "predeploy": "node scripts/check-deploy.mjs",
+    "deploy": "npm run build && wrangler deploy",
     "test:zoom": "npm run build && node scripts/test-zoom.mjs"
   },
   "dependencies": {
