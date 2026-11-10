@@ -36,6 +36,16 @@ Execute `npm test` para a matriz de telas e `npm run test:zoom` para zoom real d
 
 `npm run test:master` testa o MASTER em dois tamanhos de tela e o fluxo PLAYER no celular, com entrada, remoção, resposta e reconexão pelo Worker local.
 
+### Carga de sala
+
+Com o Worker local rodando (`npm run dev:worker`), execute `npm run test:load -- 150`. Use `50`, `100` ou `150` bots. O script cria uma sala própria. As opções `--url`, `--source-ip`, `--seed` e `--rounds` ajustam o alvo, o IP local, a sequência aleatória e a quantidade de rodadas antes da rajada.
+
+O relatório JSON inclui p50/p95 em milissegundos, colisões de nome, reconexões, rejeições e o IP TCP observado no upgrade. A latência de confirmação mede do envio até o ACK. A abertura também é medida do comando do MASTER até o recebimento por cada bot. A entrega por evento usa `serverNow` e exige relógios alinhados para comparação entre hosts.
+
+Na rajada, o script valida o intervalo entre a primeira e a última resposta tanto no envio quanto no aceite pelo servidor. Também verifica a cadência dos lotes regulares de `answer_count` e a contagem final. O envio final é imediato quando a pergunta fecha. O script sai com erro se detectar bloqueio, perda de respostas ou falha nesses critérios.
+
+Consulte as [medições e a comparação antes/depois](docs/carga.md).
+
 ## Editar o conteúdo
 
 - `src/data/questions.ts` contém o conteúdo público das 17 perguntas. `worker/questions.server.ts` contém respostas, explicações e fontes. Preserve os IDs e a ordem correspondente, e atualize `questionSetVersion` ao mudar o banco. O build do navegador rejeita módulos do Worker e desativa source maps.

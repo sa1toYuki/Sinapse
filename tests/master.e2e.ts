@@ -86,7 +86,7 @@ test('conduz a partida pelo Worker até o pódio e retoma a sala após recarrega
   await fits(page);
   await page.screenshot({ path: info.outputPath('podio.png'), fullPage: true });
   const publicPath = await page.getByRole('link', { name: 'Ranking público' }).getAttribute('href');
-  expect(publicPath).toMatch(/^\/ranking\?game=[a-f0-9-]{36}$/);
+  expect(publicPath).toMatch(new RegExp(`^/ranking\\?game=${pin}-[0-9]+$`));
   await page.reload();
   await expect(ranking.locator('tbody tr')).toHaveCount(6);
   const expectedRows = await ranking.locator('tbody tr').allTextContents();

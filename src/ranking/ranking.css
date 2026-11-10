@@ -13,10 +13,12 @@
   overflow-wrap: anywhere;
 }
 
-.final-ranking-table thead { color: var(--gold-light); }
+.final-ranking-table th { text-align: start; }
+.final-ranking-table thead { color: var(--gold-light); font-size: 0.875rem; }
 .final-ranking-table thead th:first-child { width: 3rem; }
 .final-ranking-table thead th:nth-child(3) { width: clamp(5.5rem, 12vw, 8rem); }
-.final-ranking-table thead th:last-child { width: clamp(3.5rem, 8vw, 6rem); }
+.final-ranking-table thead th:last-child { width: clamp(4rem, 8vw, 6rem); }
+.final-ranking-table tr > :last-child { white-space: nowrap; }
 .final-ranking-table th:nth-child(n+3),
 .final-ranking-table td:nth-child(n+3) { text-align: end; }
 .final-ranking-table tbody tr:first-child { color: var(--gold-light); }

@@ -14,11 +14,13 @@ type AlarmKind = 'deadline' | 'cleanup' | 'd1';
 type AlarmJob = { kind: AlarmKind; due: number; attempts: number };
 type Bucket = { remaining: number; updatedAt: number };
 type Payload = Record<string, unknown>;
+type QuestionProgress = { gameId: string; revision: number; connected: Set<string>; answeredCount: number };
 
 const IDLE_MS = 30 * 60_000;
 const RETAIN_MS = 15 * 60_000;
 const AUTH_GRACE_MS = 15_000;
 const COUNT_MS = 250;
+const LOBBY_BATCH_MS = 100;
 const questionCount = serverQuestions.length;
 
 function take(bucket: Bucket, now: number, capacity: number, perSecond: number) {
@@ -36,6 +38,8 @@ export class Room extends DurableObject<Env> {
   private readonly roomRate: Bucket = { remaining: 1000, updatedAt: Date.now() };
   private readonly upgradeRate: Bucket = { remaining: 400, updatedAt: Date.now() };
   private countTimer?: ReturnType<typeof setTimeout>;
+  private lobbyTimer?: ReturnType<typeof setTimeout>;
+  private progress?: QuestionProgress;
   private scheduledAt?: number;
   private lastCountAt = -Infinity;
   private lastCount = '';
@@ -139,7 +143,7 @@ export class Room extends DurableObject<Env> {
     }
 
     const state = this.state();
-    if (!state || !peer.role || peer.gameId !== state.gameId || (peer.role === 'PLAYER' && !this.player(peer.playerId!))) {
+    if (!state || !peer.role || peer.gameId !== state.gameId || (peer.role === 'PLAYER' && !this.playerExists(peer.playerId!))) {
       return this.error(socket, 'BAD_TOKEN', message.requestId);
     }
     if (message.type === 'room.sync') {
@@ -191,20 +195,23 @@ export class Room extends DurableObject<Env> {
 
     // Resolve an expired deadline before attaching a new recipient to broadcasts.
     if (state.phase === 'QUESTION_OPEN' && now >= state.deadlineAt!) this.closeQuestion(state, now);
-    for (const [old, attachment] of this.peers(state)) {
-      if (attachment.role !== identity.role || attachment.playerId !== identity.playerId) continue;
-      old.serializeAttachment(null);
-      old.close(1000, 'Connection replaced');
+    if (!joined) {
+      for (const [old, attachment] of this.peers(state)) {
+        if (attachment.role !== identity.role || attachment.playerId !== identity.playerId) continue;
+        old.serializeAttachment(null);
+        old.close(1000, 'Connection replaced');
+      }
     }
     socket.serializeAttachment(identity);
     if (identity.role === 'MASTER') this.socketRates.set(socket, { remaining: 64, updatedAt: now });
     const current = this.state()!;
+    if (current.phase === 'QUESTION_OPEN' && identity.role === 'PLAYER') this.progress = undefined;
     const snapshot = this.snapshot(current, identity);
     this.send(socket, joined
       ? { type: 'joined', playerId: joined.id, name: joined.name, reconnectToken: token, snapshot, requestId: message.requestId }
       : { type: 'resumed', snapshot, requestId: message.requestId });
     this.replayReveal(socket, current, identity);
-    if (current.phase === 'LOBBY') this.lobby(current);
+    if (current.phase === 'LOBBY' && identity.role === 'PLAYER') this.queueLobby(current);
     if (current.phase === 'QUESTION_OPEN' && !this.maybeClose(current, now)) this.throttleCount(current, now);
     this.touch(current, now);
     await this.schedule();
@@ -223,16 +230,18 @@ export class Room extends DurableObject<Env> {
       return;
     }
     const outcome = this.storage.transactionSync(() => {
-      const previous = this.getAnswer(state, playerId);
-      if (previous) return { ...previous, status: 'already_answered' };
-      this.sql.exec('INSERT INTO answers VALUES (?, ?, ?, ?)', state.questionIndex, playerId, message.choice, now);
-      this.touch(state, now);
-      return { choice: message.choice, acceptedAt: now, status: 'accepted' };
+      const inserted = this.sql.exec<Answer>(`INSERT INTO answers VALUES (?, ?, ?, ?)
+        ON CONFLICT (questionIndex, playerId) DO NOTHING RETURNING choice, acceptedAt`, state.questionIndex, playerId, message.choice, now).toArray()[0];
+      return inserted ? { ...inserted, status: 'accepted' } : { ...this.getAnswer(state, playerId)!, status: 'already_answered' };
     });
     this.send(socket, { type: 'answer_ack', ...outcome, questionId: message.questionId, requestId: message.requestId });
     if (outcome.status === 'already_answered') return;
-    if (!this.maybeClose(state, now)) this.throttleCount(state, now);
-    await this.schedule();
+    if (this.progress?.gameId === state.gameId && this.progress.revision === state.revision && this.progress.connected.has(playerId)) {
+      this.progress.answeredCount++;
+    }
+    // Opening and closing the round already renew the cleanup deadline.
+    if (this.maybeClose(state, now)) await this.schedule();
+    else this.throttleCount(state, now);
   }
 
   private async command(socket: WebSocket, state: RoomState, message: Extract<Message, { commandId: string }>, now: number) {
@@ -268,8 +277,11 @@ export class Room extends DurableObject<Env> {
         target.serializeAttachment(null);
         target.close(1008, 'Removed from room');
       }
-      if (state.phase === 'LOBBY') this.lobby(state);
-      if (state.phase === 'QUESTION_OPEN' && !this.maybeClose(state, now)) this.throttleCount(state, now);
+      if (state.phase === 'LOBBY') this.queueLobby(state);
+      if (state.phase === 'QUESTION_OPEN') {
+        this.progress = undefined;
+        if (!this.maybeClose(state, now)) this.throttleCount(state, now);
+      }
       if (state.phase === 'LEADERBOARD') this.publishPhase(state);
     } else {
       const next = transition(state, message.type, now, this.playerCount(), questionCount);
@@ -295,7 +307,10 @@ export class Room extends DurableObject<Env> {
           this.touch(updated, now);
           this.save(updated);
         });
-        if (updated.phase === 'QUESTION_OPEN') this.resetCount();
+        if (updated.phase === 'QUESTION_OPEN') {
+          this.clearLobbyTimer();
+          this.resetCount();
+        }
         this.publishPhase(updated);
       }
     }
@@ -342,8 +357,9 @@ export class Room extends DurableObject<Env> {
     // The runtime handles the close handshake on current compatibility dates.
     const state = this.state();
     if (peer?.role !== 'PLAYER' || !state || peer.gameId !== state.gameId) return;
-    if (state.phase === 'LOBBY') this.lobby(state);
+    if (state.phase === 'LOBBY') this.queueLobby(state);
     if (state.phase === 'QUESTION_OPEN') {
+      this.progress = undefined;
       const now = Date.now();
       if (this.maybeClose(state, now)) await this.schedule();
       else this.throttleCount(state, now);
@@ -360,6 +376,9 @@ export class Room extends DurableObject<Env> {
     });
   }
   private playerCount() { return this.sql.exec<{ count: number }>('SELECT count(*) AS count FROM players').one().count; }
+  private playerExists(id: string) {
+    return this.sql.exec('SELECT 1 FROM players WHERE id = ?', id).toArray().length > 0;
+  }
   private nameTaken(nameKey: string) {
     return this.sql.exec('SELECT 1 FROM players WHERE nameKey = ?', nameKey).toArray().length > 0;
   }
@@ -380,24 +399,38 @@ export class Room extends DurableObject<Env> {
     this.send(socket, { type: 'error', code, message: code, retryable: code === 'RATE_LIMITED', requestId });
   }
 
-  private roster(state: RoomState) {
-    const connected = new Set(this.peers(state).map(([, peer]) => peer.playerId));
+  private roster(state: RoomState, peers = this.peers(state)) {
+    const connected = new Set(peers.map(([, peer]) => peer.playerId));
     return this.sql.exec<{ id: string; name: string }>('SELECT id, name FROM players ORDER BY joined').toArray()
       .map(({ id, name }) => ({ playerId: id, name, connected: connected.has(id) }));
   }
-  private lobby(state: RoomState) {
-    const players = this.roster(state);
-    for (const [socket, peer] of this.peers(state)) this.send(socket, {
-      type: 'lobby_update', playerCount: players.length, ...this.meta(state), ...(peer.role === 'MASTER' ? { players } : {}),
-    });
+  private clearLobbyTimer() {
+    if (this.lobbyTimer !== undefined) clearTimeout(this.lobbyTimer);
+    this.lobbyTimer = undefined;
+  }
+  private queueLobby(state: RoomState) {
+    this.lobbyTimer ??= setTimeout(() => {
+      this.lobbyTimer = undefined;
+      const current = this.state();
+      if (current?.gameId !== state.gameId || current.phase !== 'LOBBY') return;
+      const peers = this.peers(current);
+      const players = this.roster(current, peers);
+      const payload = { type: 'lobby_update', playerCount: players.length, ...this.meta(current) };
+      for (const [socket, peer] of peers) this.send(socket, peer.role === 'MASTER' ? { ...payload, players } : payload);
+    }, LOBBY_BATCH_MS);
   }
 
   private count(state: RoomState) {
-    const connected = new Set(this.peers(state).flatMap(([, peer]) => peer.playerId ? [peer.playerId] : []));
-    const answered = this.sql.exec<{ playerId: string }>('SELECT playerId FROM answers WHERE questionIndex = ?', state.questionIndex).toArray();
-    return { eligibleCount: connected.size, answeredCount: answered.filter(answer => connected.has(answer.playerId)).length };
+    if (this.progress?.gameId !== state.gameId || this.progress.revision !== state.revision) {
+      const connected = new Set(this.peers(state).flatMap(([, peer]) => peer.playerId ? [peer.playerId] : []));
+      const answered = this.sql.exec<{ playerId: string }>('SELECT playerId FROM answers WHERE questionIndex = ?', state.questionIndex).toArray();
+      this.progress = { gameId: state.gameId, revision: state.revision, connected,
+        answeredCount: answered.filter(answer => connected.has(answer.playerId)).length };
+    }
+    return { eligibleCount: this.progress.connected.size, answeredCount: this.progress.answeredCount };
   }
   private resetCount() {
+    this.progress = undefined;
     if (this.countTimer !== undefined) clearTimeout(this.countTimer);
     this.countTimer = undefined;
     this.lastCountAt = -Infinity;
@@ -516,6 +549,7 @@ export class Room extends DurableObject<Env> {
       } else if (state.phase === 'FINAL_PODIUM' && !state.persisted) {
         this.job('cleanup', Date.now() + RETAIN_MS);
       } else {
+        this.clearLobbyTimer();
         this.resetCount();
         for (const socket of this.ctx.getWebSockets()) {
           socket.serializeAttachment(null);

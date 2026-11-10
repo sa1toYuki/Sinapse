@@ -9,6 +9,7 @@
     "test": "playwright test",
     "test:master": "playwright test --config playwright.master.config.ts",
     "test:worker": "npm run build && vitest run",
+    "test:load": "node scripts/load-room.mjs",
     "dev:worker": "npm run build && wrangler dev --local",
     "test:zoom": "npm run build && node scripts/test-zoom.mjs"
   },
@@ -29,6 +30,7 @@
     "typescript": "~5.7.2",
     "vite": "^6.0.5",
     "vitest": "^4.1.12",
-    "wrangler": "^4.160.0"
+    "wrangler": "^4.160.0",
+    "ws": "^8.22.2"
   }
 }

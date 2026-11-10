@@ -149,7 +149,7 @@ describe('sala no runtime Workers', () => {
     const room = await create();
     const host = await master(room);
     const player = await join(room.pin, 'Jogador');
-    await join(room.pin, 'Ainda esperando');
+    const waiting = await join(room.pin, 'Ainda esperando');
     await host.command('master.start');
     const answer = await player.request('player.answer', { questionId: 1, choice: 'A' });
     expect(answer.status).toBe('accepted');
@@ -160,6 +160,10 @@ describe('sala no runtime Workers', () => {
     const resume = await reconnected.request('player.resume', { pin: room.pin, playerId: player.playerId, reconnectToken: player.reconnectToken });
     expect(resume).toMatchObject({ type: 'resumed', snapshot: { phase: 'QUESTION_OPEN', myAnswer: 'A' } });
     expect(await reconnected.request('player.answer', { questionId: 1, choice: 'B' })).toMatchObject({ status: 'already_answered', choice: 'A', acceptedAt: answer.acceptedAt });
+    expect(await host.request('room.sync')).toMatchObject({ phase: 'QUESTION_OPEN', eligibleCount: 2, answeredCount: 1 });
+    expect(await waiting.request('player.answer', { questionId: 1, choice: 'B' })).toMatchObject({ status: 'accepted' });
+    await host.find(frame => frame.type === 'question_reveal');
+    expect(host.frames.filter(frame => frame.type === 'answer_count').at(-1)).toMatchObject({ eligibleCount: 2, answeredCount: 2 });
   });
 
   it('rejeita a resposta depois de deadlineAt mesmo com o alarm pendente', async () => {
@@ -293,8 +297,8 @@ describe('sala no runtime Workers', () => {
     await host.find(frame => frame.type === 'persistence_status' && frame.persisted === true);
     const response = await worker.fetch(`${origin}/api/ranking?game=${rankingId}`);
     expect(response.status).toBe(200);
-    const final = await response.json<{ gameId: string; entries: { name: string; rank: number; score: number; responseTimeMs: number }[] }>();
-    expect(final.gameId).toBe(rankingId);
+    const final = await response.json<{ rankingId: string; entries: { name: string; rank: number; score: number; responseTimeMs: number }[] }>();
+    expect(final.rankingId).toBe(rankingId);
     expect(final.entries.map(({ name, ...result }) => result)).toEqual(Array.from({ length: 6 }, (_, index) => ({ rank: index + 1, score: 0, responseTimeMs: 510_000 })));
   });
 
@@ -314,13 +318,13 @@ describe('sala no runtime Workers', () => {
       row(latest, 'Empatou, foi mais rápida', 1, 800, 10000),
     ]);
     const response = await worker.fetch(`${origin}/api/ranking`);
-    expect(await response.json()).toEqual({ gameId: latest, entries: [
+    expect(await response.json()).toEqual({ rankingId: `123456-${finish}`, entries: [
       { name: 'Empatou, foi mais rápida', rank: 1, score: 800, responseTimeMs: 10000 },
       { name: 'Empatou, levou mais tempo', rank: 2, score: 800, responseTimeMs: 20000 },
       { name: 'Rápida, menos pontos', rank: 3, score: 300, responseTimeMs: 3000 },
     ] });
-    const selected = await worker.fetch(`${origin}/api/ranking?game=${older}`);
-    expect(await selected.json()).toEqual({ gameId: older, entries: [{ name: 'Jogo anterior', rank: 1, score: 1100, responseTimeMs: 1000 }] });
+    const selected = await worker.fetch(`${origin}/api/ranking?game=123456-${finish - 5000}`);
+    expect(await selected.json()).toEqual({ rankingId: `123456-${finish - 5000}`, entries: [{ name: 'Jogo anterior', rank: 1, score: 1100, responseTimeMs: 1000 }] });
     expect((await worker.fetch(`${origin}/api/ranking?game=123456`)).status).toBe(400);
   });
 });
