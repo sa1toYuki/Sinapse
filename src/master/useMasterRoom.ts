@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Letter } from '../data/questions';
+import { messageId, openRoomSocket } from '../rooms/socket';
 
 type Credentials = { pin: string; masterToken: string };
 type Meta = { revision: number; serverNow: number };
@@ -14,7 +15,8 @@ type Snapshot = Meta & { questionIndex: number } & (
   | { phase: 'LOBBY'; players: Player[] }
   | ({ phase: 'QUESTION_OPEN' } & Open)
   | { phase: 'QUESTION_REVEAL'; questionId: number }
-  | { phase: 'LEADERBOARD' | 'FINAL_PODIUM'; entries: Entry[] }
+  | { phase: 'LEADERBOARD'; entries: Entry[] }
+  | { phase: 'FINAL_PODIUM'; rankingId: string; persisted: boolean }
 );
 
 type Frame = { v: 1 } & (
@@ -24,7 +26,9 @@ type Frame = { v: 1 } & (
   | (Meta & Open & { type: 'question_open'; questionIndex: number })
   | (Meta & Count & { type: 'answer_count'; questionId: number })
   | (Meta & Reveal & { type: 'question_reveal' })
-  | (Meta & { type: 'leaderboard' | 'final_podium'; entries: Entry[] })
+  | (Meta & { type: 'leaderboard'; entries: Entry[] })
+  | (Meta & { type: 'final_podium'; rankingId: string; persisted: boolean })
+  | (Meta & { type: 'persistence_status'; persisted: boolean })
   | { type: 'command_ack'; requestId: string }
   | { type: 'error'; requestId?: string; code: string }
 );
@@ -33,15 +37,12 @@ type View = { revision: number; questionIndex: number } & (
   | { phase: 'LOBBY'; players: Player[] }
   | ({ phase: 'QUESTION_OPEN'; expiresAt: number } & Question & Count)
   | { phase: 'QUESTION_REVEAL'; questionId: number; reveal?: Reveal; question?: Question }
-  | { phase: 'LEADERBOARD' | 'FINAL_PODIUM'; entries: Entry[] }
+  | { phase: 'LEADERBOARD'; entries: Entry[] }
+  | { phase: 'FINAL_PODIUM'; rankingId: string; persisted: boolean }
 );
 
 export type MasterCommand = 'master.start' | 'master.end_question' | 'master.show_leaderboard' | 'master.next';
 const STORAGE_KEY = 'sinapse:master';
-
-function messageId() {
-  return Array.from(crypto.getRandomValues(new Uint32Array(4)), part => part.toString(16).padStart(8, '0')).join('');
-}
 
 function validCredentials(value: unknown): value is Credentials {
   if (!value || typeof value !== 'object') return false;
@@ -79,7 +80,8 @@ function applySnapshot(previous: View | null, snapshot: Snapshot, receivedAt: nu
       if (previous?.phase === phase && previous.revision === revision) return previous;
       return { phase, revision, questionIndex, questionId: snapshot.questionId,
         question: previous?.phase === 'QUESTION_OPEN' && previous.questionId === snapshot.questionId ? previous : undefined };
-    default: return { phase, revision, questionIndex, entries: snapshot.entries };
+    case 'LEADERBOARD': return { phase, revision, questionIndex, entries: snapshot.entries };
+    case 'FINAL_PODIUM': return { phase, revision, questionIndex, rankingId: snapshot.rankingId, persisted: snapshot.persisted };
   }
 }
 
@@ -100,7 +102,9 @@ function applyEvent(view: View | null, message: Exclude<Frame, { type: 'resumed'
       return { phase: 'QUESTION_REVEAL', revision, questionIndex, questionId, question, reveal: { questionId, correct, counts } };
     }
     case 'leaderboard': return { phase: 'LEADERBOARD', revision, questionIndex, entries: message.entries };
-    case 'final_podium': return { phase: 'FINAL_PODIUM', revision, questionIndex, entries: message.entries };
+    case 'final_podium': return { phase: 'FINAL_PODIUM', revision, questionIndex, rankingId: message.rankingId, persisted: message.persisted };
+    case 'persistence_status':
+      return view.phase === 'FINAL_PODIUM' && view.revision === revision && message.persisted ? { ...view, persisted: true } : view;
     default: return view;
   }
 }
@@ -125,8 +129,6 @@ export function useMasterRoom() {
   useEffect(() => {
     if (!credentials) return;
     const { pin, masterToken } = credentials;
-    const url = new URL(`/api/rooms/${pin}/ws`, location.href);
-    url.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
     let disposed = false;
     let reconnectTimer: number;
     let connectTimer: number;
@@ -142,7 +144,7 @@ export function useMasterRoom() {
 
     function connect() {
       if (disposed) return;
-      const ws = new WebSocket(url);
+      const ws = openRoomSocket(pin);
       socket = ws;
       active.current = ws;
       const requestId = messageId();
@@ -226,14 +228,14 @@ export function useMasterRoom() {
     finally { setCreating(false); }
   }
 
-  function send(type: MasterCommand) {
+  function send(type: MasterCommand | 'master.kick', playerId?: string) {
     const socket = active.current;
     if (connection !== 'ready' || socket?.readyState !== WebSocket.OPEN || command.current) return;
     const requestId = messageId();
     setError('');
     setPending(true);
     command.current = { requestId, timer: window.setTimeout(() => socket.close(), 8000) };
-    socket.send(JSON.stringify({ v: 1, type, requestId, commandId: messageId() }));
+    socket.send(JSON.stringify({ v: 1, type, requestId, commandId: messageId(), playerId }));
   }
 
   function resume() {

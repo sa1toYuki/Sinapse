@@ -61,6 +61,7 @@ Todas as mensagens WebSocket são objetos JSON com `v: 1` e `type`. O PIN usado 
 | `type` | Emissor | Campos adicionais | Efeito |
 | --- | --- | --- | --- |
 | `player.join` | PLAYER novo | `pin`, `name`, `requestId` | Valida PIN/nome/capacidade no DO e cria identidade no LOBBY. |
+| `player.check_name` | PLAYER novo | `pin`, `name`, `requestId` | Consulta disponibilidade do nome no LOBBY. A reserva ocorre na entrada. |
 | `player.resume` | PLAYER | `pin`, `playerId`, `reconnectToken`, `requestId` | Reassocia identidade e entrega snapshot; não reabre resposta. |
 | `master.resume` | MASTER | `pin`, `masterToken`, `requestId` | Autentica o controle MASTER e entrega snapshot. |
 | `master.start` | MASTER | `commandId`, `requestId` | LOBBY → primeira QUESTION_OPEN. |
@@ -76,15 +77,16 @@ Todas as mensagens WebSocket são objetos JSON com `v: 1` e `type`. O PIN usado 
 | `type` | Destinatário | Campos adicionais | Quando |
 | --- | --- | --- | --- |
 | `joined` | Apenas PLAYER solicitante | `playerId`, `reconnectToken`, `name`, `snapshot`, `requestId` | Entrada aceita. Token é segredo; nunca é broadcast. |
+| `name_status` | Apenas PLAYER solicitante | `available`, `requestId` | Resposta à consulta de nome. |
 | `resumed` | Apenas solicitante | `snapshot`, `requestId`; PLAYER pode receber token rotacionado | Reconexão aceita. |
 | `snapshot` | Apenas solicitante | `phase`, `questionIndex`, `questionId?`, `deadlineAt?`, `myAnswer?`, `myScore?`, `revision`, `serverNow` e campos específicos do papel | Conexão, reconexão ou pedido de ressincronização após lacuna. Para MASTER inclui lista/contagem de participantes e pergunta visível na fase; para PLAYER nunca inclui gabarito antes da revelação. |
 | `lobby_update` | MASTER; PLAYER recebe só contagem/estado de espera | `playerCount`; MASTER também `players` (`playerId`, `name`, `connected`) | Entradas, reconexões e expulsões no LOBBY. |
 | `question_open` | MASTER e PLAYER, com payloads por papel | Ambos: `questionIndex`, `questionId`, `openedAt`, `deadlineAt`, `revision`, `serverNow`; MASTER: `text`, `options` A–E; PLAYER: `choices` A–E com cores | Início de cada pergunta. **Sem `correct` em ambos.** |
 | `answer_ack` | Apenas PLAYER que respondeu | `questionId`, `choice`, `acceptedAt`, `requestId`, `status: accepted`; reenvio recebe `status: already_answered` | Confirmação individual; não informa acerto nem pontos antes da revelação. |
 | `answer_count` | Apenas MASTER | `questionId`, `answeredCount`, `eligibleCount`, `revision`, `serverNow` | Throttle leading + trailing de 250 ms enquanto houver mudança, mais um envio final no fechamento. `eligibleCount` é o número de jogadores conectados na sala. É contagem agregada, nunca um evento por resposta. Não contém alternativa nem identidade de quem respondeu. |
-| `question_reveal` | MASTER e PLAYER, com payloads por papel | `questionId`, `correct`, `revision`, `serverNow`; MASTER: `explanation`, contagens por alternativa; PLAYER: `myChoice`, `myPoints`, `myTotalScore` | Após encerrar a pergunta. A partir daqui o gabarito pode ser divulgado. |
+| `question_reveal` | MASTER e PLAYER, com payloads por papel | `questionId`, `correct`, `revision`, `serverNow`; MASTER: `explanation`, contagens por alternativa; PLAYER: `myChoice`, `myPoints`, `myTotalScore`, `myRank` | Após encerrar a pergunta. A partir daqui o gabarito pode ser divulgado. |
 | `leaderboard` | MASTER; PLAYER recebe apenas `myRank`, `myScore` | MASTER: `entries` com **top 5 apenas** (`rank`, `playerId`, `name`, `score`, `responseTimeMs`), `revision`, `serverNow` | Entrada em LEADERBOARD; snapshots MASTER nessa fase também limitam `entries` ao top 5. |
-| `final_podium` | MASTER; PLAYER recebe resultado individual | MASTER: ranking completo e `persisted: boolean`; PLAYER: `myRank`, `myScore`, `revision`, `serverNow` | Fim da 17ª pergunta. |
+| `final_podium` | MASTER; PLAYER recebe resultado individual | MASTER: ranking completo, `rankingId` público da partida e `persisted: boolean`; PLAYER: `myRank`, `myScore`, `revision`, `serverNow` | Fim da 17ª pergunta. O snapshot final do MASTER também inclui `rankingId` e `persisted`. |
 | `persistence_status` | MASTER | `persisted`, `revision`, `serverNow` | Confirmação tardia ou falha da escrita no D1. |
 | `player_kicked` | Apenas PLAYER expulso | `playerId`, `revision`, `serverNow` | Antes de fechar a conexão; o token deixa de valer imediatamente. |
 | `command_ack` | Apenas MASTER solicitante | `commandId`, `requestId`, `revision`, `serverNow` | Comando administrativo aplicado ou repetição idempotente. |
@@ -111,6 +113,8 @@ Esquema conceitual:
 | `game_results` | `gameId`, `playerId`, `name`, `rank`, `score`, `responseTimeMs`; chave única (`gameId`, `playerId`) |
 
 A escrita final deve ser idempotente por `gameId` e transacional para não deixar ranking parcial. O DO mantém o resultado final em storage até confirmação do D1 e reexecuta a gravação em falhas transitórias. A limpeza não apaga um resultado ainda pendente de persistência; o retry do D1 e a limpeza usam a mesma fila/alarm do DO. D1 não contém outras tabelas. Política de retenção, acesso aos rankings históricos e dados pessoais dependem de decisão de produto.
+
+`GET /api/ranking` lê a última partida persistida no D1. O parâmetro opcional `game` seleciona uma partida pelo `rankingId`. A rota pública `/ranking` usa a mesma consulta que o MASTER usa depois da confirmação de gravação. O tempo é exibido em `MM:SS` e a ordenação usa milissegundos, sem arredondamento.
 
 ## 9. Riscos e pontos ambíguos a decidir
 

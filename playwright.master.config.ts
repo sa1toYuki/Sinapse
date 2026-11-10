@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
   testDir: './tests',
-  testMatch: 'master.e2e.ts',
+  testMatch: ['master.e2e.ts', 'player.e2e.ts'],
   timeout: 90_000,
   use: {
     baseURL: 'http://127.0.0.1:8791',

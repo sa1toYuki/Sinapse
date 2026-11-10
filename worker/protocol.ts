@@ -1,29 +1,20 @@
 import type { Letter } from '../src/data/questions';
 import { choices } from '../src/data/choices';
+import { normalizeName, validPin } from '../src/rooms/identity';
 import type { PhaseAction } from './rules';
 
-export { choices };
+export { choices, validPin };
 export const letters = choices.map(({ letter }) => letter);
-export const validPin = (value: unknown): value is string => typeof value === 'string' && /^[0-9]{6}$/.test(value);
 const validId = (value: unknown): value is string => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(value);
 const validToken = (value: unknown): value is string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 export const validChoice = (value: unknown): value is Letter => letters.some(letter => letter === value);
-const segmenter = new Intl.Segmenter('pt-BR', { granularity: 'grapheme' });
 const encoder = new TextEncoder();
-
-export function normalizeName(value: unknown) {
-  if (typeof value !== 'string' || value.length > 160) return null;
-  const name = value.trim().normalize('NFC');
-  const count = [...segmenter.segment(name)].length;
-  if (count < 2 || count > 20 || /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(name.replaceAll('\u200d', ''))) return null;
-  if (!/[\p{L}\p{N}\p{P}\p{S}]/u.test(name)) return null;
-  return { name, nameKey: name.toLowerCase().replaceAll('ς', 'σ').normalize('NFC') };
-}
 
 type Request = { requestId: string };
 type Command = Request & { commandId: string };
 export type Message =
   | (Request & { type: 'player.join'; pin: string; name: string; nameKey: string })
+  | (Request & { type: 'player.check_name'; pin: string; name: string; nameKey: string })
   | (Request & { type: 'player.resume'; pin: string; playerId: string; reconnectToken: string })
   | (Request & { type: 'master.resume'; pin: string; masterToken: string })
   | (Request & { type: 'player.answer'; questionId: number; choice: Letter })
@@ -43,7 +34,7 @@ export function parseMessage(raw: string | ArrayBuffer): { message?: Message; re
   const exact = (...keys: string[]) => Object.keys(data).length === keys.length && keys.every(key => Object.hasOwn(data, key));
   const { pin, playerId, reconnectToken, masterToken, questionId, choice, commandId } = data;
   switch (type) {
-    case 'player.join': {
+    case 'player.join': case 'player.check_name': {
       if (!exact('pin', 'name')) return invalid;
       if (!validPin(pin)) return { requestId, code: 'INVALID_PIN' };
       const name = normalizeName(data.name);

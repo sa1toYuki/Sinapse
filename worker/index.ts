@@ -1,3 +1,5 @@
+import { parseRankingId, readFinalRanking } from './ranking';
+
 export { Room } from './room';
 
 export interface Env {
@@ -39,9 +41,29 @@ async function hasBody(request: Request) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    if (url.pathname === '/ranking' || url.pathname === '/ranking/') {
+      if (request.method !== 'GET' && request.method !== 'HEAD') return error('METHOD_NOT_ALLOWED', 405);
+      return env.ASSETS.fetch(new Request(new URL('/', url), { method: request.method }));
+    }
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(request);
     const ip = request.headers.get('CF-Connecting-IP');
     if (ip && env.IP_LIMIT && !(await env.IP_LIMIT.limit({ key: ip })).success) return error('RATE_LIMITED', 429);
+
+    if (url.pathname === '/api/ranking') {
+      if (request.method !== 'GET') return error('METHOD_NOT_ALLOWED', 405);
+      const ids = url.searchParams.getAll('game');
+      const selected = ids.length === 1 ? parseRankingId(ids[0]) : null;
+      if (ids.length > 1 || (ids.length === 1 && !selected) || [...url.searchParams.keys()].some(key => key !== 'game')) {
+        return error('INVALID_PAYLOAD', 400);
+      }
+      try {
+        const ranking = await readFinalRanking(env.DB, selected);
+        return ranking ? Response.json(ranking, { headers: { 'Cache-Control': 'no-store' } }) : error('RANKING_NOT_FOUND', 404);
+      } catch (cause) {
+        console.error('Final ranking read failed', cause);
+        return error('RANKING_UNAVAILABLE', 503);
+      }
+    }
 
     if (url.pathname === '/api/rooms') {
       if (request.method !== 'POST') return error('METHOD_NOT_ALLOWED', 405);

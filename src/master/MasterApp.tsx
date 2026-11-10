@@ -5,6 +5,7 @@ import { sound } from '../audio/sound';
 import { choices } from '../data/choices';
 import { questions, type Letter } from '../data/questions';
 import { points } from '../data/scoring';
+import { FinalRanking } from '../ranking/FinalRanking';
 import { useMasterRoom, type Entry } from './useMasterRoom';
 
 function Invitation({ pin }: { pin: string }) {
@@ -76,13 +77,12 @@ function Score({ score }: { score: number }) {
   return <strong className="master-score">{points(score)} <small>pts</small></strong>;
 }
 
-function Ranking({ entries, podium = false }: { entries: Entry[]; podium?: boolean }) {
-  const leaders = entries.slice(0, podium ? 3 : 5);
+function Ranking({ entries }: { entries: Entry[] }) {
   return (
-    <div className={`master-results${podium ? ' master-results-final' : ''}`}>
-      <h1 tabIndex={-1}>{podium ? 'Pódio final' : 'Top 5'}</h1>
-      <ol className={podium ? 'master-podium' : 'master-ranking'}>
-        {leaders.map(entry => (
+    <div className="master-results">
+      <h1 tabIndex={-1}>Top 5</h1>
+      <ol className="master-ranking">
+        {entries.slice(0, 5).map(entry => (
           <li key={entry.playerId} data-rank={entry.rank} className="master-panel">
             <span className="master-place">{entry.rank}º</span>
             <span className="master-entry-name">{entry.name}</span>
@@ -145,7 +145,11 @@ export function MasterApp() {
               <li key={player.playerId}>
                 <span className="master-presence" role="img" aria-label={player.connected ? 'Conectado' : 'Desconectado'}
                   data-connected={player.connected} />
-                <span>{player.name}</span>
+                <span className="master-player-name">{player.name}</span>
+                <button type="button" className="master-remove" aria-label={`Remover ${player.name}`}
+                  title={`Remover ${player.name}`} disabled={!ready} onClick={() => room.send('master.kick', player.playerId)}>
+                  ×
+                </button>
               </li>
             ))}
           </ul>
@@ -178,16 +182,23 @@ export function MasterApp() {
         </div>
       </div>
     );
-  } else {
-    const final = view.phase === 'FINAL_PODIUM';
+  } else if (view.phase === 'FINAL_PODIUM') {
     content = (
-      <>
-        <Ranking entries={view.entries} podium={final} />
-        {final && connection !== 'paused' ? (
+      <FinalRanking key={view.rankingId} rankingId={view.rankingId} persisted={view.persisted} podium>
+        {connection === 'paused' ? (
+          <button type="button" className="primary master-action" onClick={room.resume}>Retomar sala</button>
+        ) : (
           <button type="button" className="primary master-action" disabled={room.creating} onClick={room.create}>
             {room.creating ? 'Criando…' : 'Nova sala'}
           </button>
-        ) : action(final ? 'Nova sala' : view.questionIndex === questions.length ? 'Ver pódio' : 'Próxima pergunta', () => room.send('master.next'))}
+        )}
+      </FinalRanking>
+    );
+  } else {
+    content = (
+      <>
+        <Ranking entries={view.entries} />
+        {action(view.questionIndex === questions.length ? 'Ver pódio' : 'Próxima pergunta', () => room.send('master.next'))}
       </>
     );
   }

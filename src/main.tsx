@@ -3,6 +3,9 @@ import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState } from "react";
 import { StageShell, TimerLED } from "./StageShell";
 import { MasterApp } from "./master/MasterApp";
+import { PlayerApp } from "./player/PlayerApp";
+import { RankingApp } from "./ranking/RankingApp";
+import { validPin } from "./rooms/identity";
 import { useGame } from "./useGame";
 import { questions, type Letter } from "./data/questions";
 import { points, scoring } from "./data/scoring";
@@ -16,6 +19,8 @@ import {
 import "./styles/tokens.css";
 import "./styles/main.css";
 import "./master/master.css";
+import "./player/player.css";
+import "./ranking/ranking.css";
 const letters: Letter[] = ["A", "B", "C", "D", "E"];
 function Logo({
   small = false,
@@ -199,6 +204,11 @@ function App() {
                 <a className="secondary master-menu-link" href="/?master=1">
                   <span className="button-icon" aria-hidden="true">✦</span>
                   <b>SALA AO VIVO</b>
+                  <span className="arrow" aria-hidden="true">→</span>
+                </a>
+                <a className="secondary master-menu-link" href="/?player=1">
+                  <span className="button-icon" aria-hidden="true">◆</span>
+                  <b>ENTRAR NA SALA</b>
                   <span className="arrow" aria-hidden="true">→</span>
                 </a>
                 <button className="text-button" onClick={() => setRules(true)}>
@@ -532,9 +542,13 @@ function App() {
   );
 }
 
-const master = new URLSearchParams(location.search).get('master') === '1';
+const params = new URLSearchParams(location.search);
+const pin = params.get('pin');
+const master = params.get('master') === '1';
+const player = params.has('pin') || params.get('player') === '1';
+const ranking = location.pathname === '/ranking' || location.pathname === '/ranking/';
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    {master ? <MasterApp /> : <App />}
+    {ranking ? <RankingApp /> : master ? <MasterApp /> : player ? <PlayerApp initialPin={validPin(pin) ? pin : ''} /> : <App />}
   </React.StrictMode>,
 );

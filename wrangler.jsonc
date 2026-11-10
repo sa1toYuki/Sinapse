@@ -4,7 +4,7 @@
   "main": "worker/index.ts",
   "compatibility_date": "2026-06-01",
   "upload_source_maps": false,
-  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": ["/api/*"] },
+  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": ["/api/*", "/ranking", "/ranking/"] },
   "durable_objects": { "bindings": [{ "name": "ROOMS", "class_name": "Room" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
   "d1_databases": [{

@@ -22,7 +22,9 @@ npm run dev:worker
 
 `POST /api/rooms` com corpo vazio retorna `{ pin, masterToken }`. Abra `GET /api/rooms/<pin>/ws` com upgrade WebSocket e `Origin` da aplicação. Envie `master.resume` com o segredo do MASTER ou `player.join` com PIN e nome. `player.resume` usa o `playerId` e o `reconnectToken` retornados na entrada. O [protocolo JSON](SPEC.md#6-protocolo-json-v1) detalha as mensagens.
 
-Abra **Sala ao vivo** no menu servido pelo Worker, ou acesse `/?master=1`, para controlar a partida no telão. O QR code aponta para `/?pin=<pin>`, o endereço reservado para a futura tela PLAYER. Os modos locais funcionam no Vite dev/preview. A correção de prática fica no Vite para preservar o gabarito das salas públicas.
+Abra **Sala ao vivo** no menu servido pelo Worker, ou acesse `/?master=1`, para controlar a partida no telão. No celular, escaneie o QR code para abrir a tela PLAYER com o PIN preenchido (`/?pin=<pin>`) ou use **Entrar na sala** (`/?player=1`). O navegador guarda o token da última sala em `localStorage` para retomar a sessão. Os modos locais funcionam no Vite dev/preview. A correção de prática fica no Vite para preservar o gabarito das salas públicas.
+
+O MASTER mostra a classificação completa quando o D1 confirma a gravação. `/ranking` exibe a última partida concluída e o link **Ranking público** no pódio abre o resultado daquela partida. A classificação mostra o tempo acumulado em `MM:SS` e usa milissegundos no desempate.
 
 ## Layout responsivo e validação
 
@@ -32,7 +34,7 @@ Execute `npm test` para a matriz de telas e `npm run test:zoom` para zoom real d
 
 `npm run test:worker` compila o projeto e roda os testes de regras e integração no Workerd, com Durable Objects, WebSockets e D1 locais. O pool precisa de acesso à rede de loopback.
 
-`npm run test:master` percorre uma partida pelo navegador, com jogadores simulados conectados ao Worker local, em dois tamanhos de tela.
+`npm run test:master` testa o MASTER em dois tamanhos de tela e o fluxo PLAYER no celular, com entrada, remoção, resposta e reconexão pelo Worker local.
 
 ## Editar o conteúdo
 

@@ -271,15 +271,18 @@ describe('sala no runtime Workers', () => {
     }
     const leaderboard = await host.find(frame => frame.type === 'leaderboard');
     expect(leaderboard.entries).toHaveLength(5);
+    let rankingId: unknown;
     await bindings.DB.prepare('ALTER TABLE game_results RENAME TO temporarily_unavailable').run();
     try {
       expect(await host.command('master.next')).toMatchObject({ type: 'command_ack' });
       const podium = await host.find(frame => frame.type === 'final_podium');
+      rankingId = podium.rankingId;
       expect(podium.entries).toHaveLength(6);
       expect(podium.persisted).toBe(false);
       expect(await players[0].find(frame => frame.type === 'final_podium')).not.toHaveProperty('entries');
       await host.find(frame => frame.type === 'persistence_status' && frame.persisted === false);
       expect((await bindings.DB.prepare('SELECT count(*) AS count FROM games WHERE pin = ?').bind(room.pin).first()).count).toBe(0);
+      expect((await worker.fetch(`${origin}/api/ranking?game=${rankingId}`)).status).toBe(404);
     } finally {
       await bindings.DB.prepare('ALTER TABLE temporarily_unavailable RENAME TO game_results').run();
     }
@@ -288,7 +291,36 @@ describe('sala no runtime Workers', () => {
     });
     await runDurableObjectAlarm(room.stub);
     await host.find(frame => frame.type === 'persistence_status' && frame.persisted === true);
-    const final = await bindings.DB.prepare('SELECT rank, score, response_time_ms FROM game_results JOIN games USING (game_id) WHERE pin = ? ORDER BY rank').bind(room.pin).all();
-    expect(final.results).toEqual(Array.from({ length: 6 }, (_, index) => ({ rank: index + 1, score: 0, response_time_ms: 510_000 })));
+    const response = await worker.fetch(`${origin}/api/ranking?game=${rankingId}`);
+    expect(response.status).toBe(200);
+    const final = await response.json<{ gameId: string; entries: { name: string; rank: number; score: number; responseTimeMs: number }[] }>();
+    expect(final.gameId).toBe(rankingId);
+    expect(final.entries.map(({ name, ...result }) => result)).toEqual(Array.from({ length: 6 }, (_, index) => ({ rank: index + 1, score: 0, responseTimeMs: 510_000 })));
+  });
+
+  it('consulta a última partida ou um resultado específico e ordena por pontos e tempo no D1', async () => {
+    const older = crypto.randomUUID();
+    const latest = crypto.randomUUID();
+    const finish = Date.now() + 10_000;
+    const game = (id: string, at: number, count: number) => bindings.DB.prepare("INSERT INTO games VALUES (?, '123456', ?, ?, 'test', ?, 'finished')")
+      .bind(id, at - 1000, at, count);
+    const row = (id: string, name: string, rank: number, score: number, elapsed: number) => bindings.DB.prepare('INSERT INTO game_results VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(id, crypto.randomUUID(), name, rank, score, elapsed);
+    await bindings.DB.batch([
+      game(older, finish - 5000, 1), game(latest, finish, 3),
+      row(older, 'Jogo anterior', 1, 1100, 1000),
+      row(latest, 'Rápida, menos pontos', 3, 300, 3000),
+      row(latest, 'Empatou, levou mais tempo', 2, 800, 20000),
+      row(latest, 'Empatou, foi mais rápida', 1, 800, 10000),
+    ]);
+    const response = await worker.fetch(`${origin}/api/ranking`);
+    expect(await response.json()).toEqual({ gameId: latest, entries: [
+      { name: 'Empatou, foi mais rápida', rank: 1, score: 800, responseTimeMs: 10000 },
+      { name: 'Empatou, levou mais tempo', rank: 2, score: 800, responseTimeMs: 20000 },
+      { name: 'Rápida, menos pontos', rank: 3, score: 300, responseTimeMs: 3000 },
+    ] });
+    const selected = await worker.fetch(`${origin}/api/ranking?game=${older}`);
+    expect(await selected.json()).toEqual({ gameId: older, entries: [{ name: 'Jogo anterior', rank: 1, score: 1100, responseTimeMs: 1000 }] });
+    expect((await worker.fetch(`${origin}/api/ranking?game=123456`)).status).toBe(400);
   });
 });

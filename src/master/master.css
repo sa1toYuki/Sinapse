@@ -174,14 +174,33 @@
 
 .master-players li {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   min-width: 0;
-  padding: var(--space-6) var(--space-9);
+  padding-inline-start: var(--space-9);
   gap: var(--space-7);
   border: var(--border) solid #d5ad5040;
   border-radius: var(--radius);
   background: #071528b8;
 }
+
+.master-player-name {
+  flex: 1;
+  min-width: 0;
+  padding-block: var(--space-6);
+}
+
+.master-remove {
+  flex: none;
+  min-width: var(--touch-target);
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--gold-light);
+  font-size: 1.35rem;
+}
+
+.master-remove:hover:not(:disabled) { background: #fa696925; color: #ffb6b6; }
+.master-remove:disabled { opacity: 0.5; }
 
 .master-presence {
   flex: none;

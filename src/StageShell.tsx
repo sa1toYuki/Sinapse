@@ -1,13 +1,13 @@
 import type { ReactNode } from "react";
 
 export function StageShell({
-  muted,
+  muted = true,
   onSound,
   children,
   home = false,
 }: {
-  muted: boolean;
-  onSound: () => void;
+  muted?: boolean;
+  onSound?: () => void;
   children: ReactNode;
   home?: boolean;
 }) {
@@ -28,7 +28,7 @@ export function StageShell({
         </div>
         <header className="topbar">
           {home && <a className="stage-home" href="/" aria-label="Sinapse, início">SINAPSE</a>}
-          <button
+          {onSound && <button
             className="sound"
             onClick={onSound}
             aria-label={muted ? "Ativar som" : "Desativar som"}
@@ -38,7 +38,7 @@ export function StageShell({
             <span className="sound-label">
               {muted ? " SOM DESLIGADO" : " SOM LIGADO"}
             </span>
-          </button>
+          </button>}
         </header>
         {children}
         <footer>

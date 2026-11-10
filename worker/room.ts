@@ -2,6 +2,7 @@ import { DurableObject } from 'cloudflare:workers';
 import type { Letter } from '../src/data/questions';
 import { choices, letters, newToken, parseMessage, sameHash, tokenHash, validPin, type Message } from './protocol';
 import { questionSetVersion, serverQuestions } from './questions.server';
+import { rankingId } from './ranking';
 import { MAX_PLAYERS, scoreAnswer, shouldClose, transition, type Round } from './rules';
 import type { Env } from './index';
 
@@ -126,6 +127,13 @@ export class Room extends DurableObject<Env> {
     if ('pin' in message) {
       if (peer.role) return this.error(socket, 'WRONG_PHASE', message.requestId);
       if (peer.pin !== message.pin) return this.error(socket, 'INVALID_PIN', message.requestId);
+      if (message.type === 'player.check_name') {
+        const state = this.state();
+        if (!state) return this.error(socket, 'INVALID_PIN', message.requestId);
+        if (state.phase !== 'LOBBY') return this.error(socket, 'WRONG_PHASE', message.requestId);
+        this.send(socket, { type: 'name_status', available: !this.nameTaken(message.nameKey), requestId: message.requestId });
+        return;
+      }
       await this.authenticate(socket, peer, message);
       return;
     }
@@ -151,7 +159,7 @@ export class Room extends DurableObject<Env> {
     await this.command(socket, state, message, receivedAt);
   }
 
-  private async authenticate(socket: WebSocket, peer: Peer, message: Extract<Message, { pin: string }>) {
+  private async authenticate(socket: WebSocket, peer: Peer, message: Extract<Message, { type: 'player.join' | 'player.resume' | 'master.resume' }>) {
     const token = message.type === 'player.join' ? newToken() : message.type === 'player.resume' ? message.reconnectToken : message.masterToken;
     const hash = await tokenHash(token);
     if (this.peer(socket)?.role || socket.readyState !== WebSocket.OPEN) return;
@@ -165,7 +173,7 @@ export class Room extends DurableObject<Env> {
       if (state.phase !== 'LOBBY') return this.error(socket, 'WRONG_PHASE', message.requestId);
       const id = crypto.randomUUID();
       const result = this.storage.transactionSync(() => {
-        if (this.sql.exec('SELECT 1 FROM players WHERE nameKey = ?', message.nameKey).toArray().length) return 'NAME_TAKEN';
+        if (this.nameTaken(message.nameKey)) return 'NAME_TAKEN';
         if (this.playerCount() >= MAX_PLAYERS) return 'ROOM_FULL';
         return this.sql.exec<Player>('INSERT INTO players (id, name, nameKey, tokenHash) VALUES (?, ?, ?, ?) RETURNING *', id, message.name, message.nameKey, hash).one();
       });
@@ -352,6 +360,9 @@ export class Room extends DurableObject<Env> {
     });
   }
   private playerCount() { return this.sql.exec<{ count: number }>('SELECT count(*) AS count FROM players').one().count; }
+  private nameTaken(nameKey: string) {
+    return this.sql.exec('SELECT 1 FROM players WHERE nameKey = ?', nameKey).toArray().length > 0;
+  }
   private player(id: string) { return this.sql.exec<Player>('SELECT * FROM players WHERE id = ?', id).toArray()[0]; }
   private getAnswer(state: RoomState, playerId: string) {
     return this.sql.exec<Answer>('SELECT choice, acceptedAt FROM answers WHERE questionIndex = ? AND playerId = ?', state.questionIndex, playerId).toArray()[0];
@@ -432,12 +443,15 @@ export class Room extends DurableObject<Env> {
         const { id, explanation, correct } = this.question(state);
         if (master) return { questionId: id, correct, explanation, counts: histogram ?? this.histogram(state) };
         const player = this.player(peer.playerId!);
+        const myRank = (ranking ?? this.ranking()).find(entry => entry.playerId === player.id)!.rank;
         return { questionId: id, correct, myChoice: this.getAnswer(state, peer.playerId!)?.choice ?? null,
-          myPoints: player.lastPoints, myTotalScore: player.score };
+          myPoints: player.lastPoints, myTotalScore: player.score, myRank };
       }
       case 'LEADERBOARD': case 'FINAL_PODIUM': {
         const entries = ranking ?? this.ranking();
-        if (master) return state.phase === 'LEADERBOARD' ? { entries: entries.slice(0, 5) } : { entries, persisted: state.persisted };
+        if (master) return state.phase === 'LEADERBOARD'
+          ? { entries: entries.slice(0, 5) }
+          : { entries, rankingId: rankingId(state.pin, state.finishedAt!), persisted: state.persisted };
         const entry = entries.find(entry => entry.playerId === peer.playerId)!;
         return { myRank: entry.rank, myScore: entry.score };
       }
@@ -457,7 +471,7 @@ export class Room extends DurableObject<Env> {
     if (state.phase === 'QUESTION_REVEAL') this.send(socket, { type: 'question_reveal', ...this.meta(state), ...this.phaseFields(state, peer) });
   }
   private publishPhase(state: RoomState) {
-    const ranking = state.phase === 'LEADERBOARD' || state.phase === 'FINAL_PODIUM' ? this.ranking() : undefined;
+    const ranking = state.phase === 'QUESTION_REVEAL' || state.phase === 'LEADERBOARD' || state.phase === 'FINAL_PODIUM' ? this.ranking() : undefined;
     const histogram = state.phase === 'QUESTION_REVEAL' ? this.histogram(state) : undefined;
     const type = state.phase.toLowerCase();
     for (const [socket, peer] of this.peers(state)) this.send(socket, { type, ...this.meta(state), ...this.phaseFields(state, peer, ranking, histogram) });

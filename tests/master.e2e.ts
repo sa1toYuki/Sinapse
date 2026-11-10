@@ -79,8 +79,21 @@ test('conduz a partida pelo Worker até o pódio e retoma a sala após recarrega
   await expect(page.getByRole('heading', { name: 'Pódio final' })).toBeVisible();
   await expect(page.locator('.master-podium li')).toHaveCount(3);
   await expect(page.locator('.master-podium [data-rank="1"]')).toContainText(names[0]);
+  const ranking = page.getByRole('table', { name: 'Ranking final' });
+  await expect(ranking.locator('tbody tr')).toHaveCount(6);
+  await expect(ranking.locator('tbody tr').first().getByRole('rowheader')).toHaveText(names[0]);
+  await expect(ranking.getByRole('cell', { name: '08:30', exact: true })).toHaveCount(5);
   await fits(page);
   await page.screenshot({ path: info.outputPath('podio.png'), fullPage: true });
+  const publicPath = await page.getByRole('link', { name: 'Ranking público' }).getAttribute('href');
+  expect(publicPath).toMatch(/^\/ranking\?game=[a-f0-9-]{36}$/);
+  await page.reload();
+  await expect(ranking.locator('tbody tr')).toHaveCount(6);
+  const expectedRows = await ranking.locator('tbody tr').allTextContents();
+  await players.goto(publicPath!);
+  await expect(players.getByRole('heading', { name: 'Ranking final' })).toBeVisible();
+  await expect(players.getByRole('table', { name: 'Ranking final' }).locator('tbody tr')).toHaveText(expectedRows);
+  await fits(players);
   await players.close();
 });
 
