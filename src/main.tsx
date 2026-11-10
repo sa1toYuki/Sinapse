@@ -1,6 +1,8 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { useEffect, useRef, useState } from "react";
+import { StageShell, TimerLED } from "./StageShell";
+import { MasterApp } from "./master/MasterApp";
 import { useGame } from "./useGame";
 import { questions, type Letter } from "./data/questions";
 import { points, scoring } from "./data/scoring";
@@ -13,6 +15,7 @@ import {
 } from "./storage/progress";
 import "./styles/tokens.css";
 import "./styles/main.css";
+import "./master/master.css";
 const letters: Letter[] = ["A", "B", "C", "D", "E"];
 function Logo({
   small = false,
@@ -30,22 +33,6 @@ function Logo({
             <i /> O GRANDE QUIZ <i />
           </div>
         )}
-      </div>
-    </div>
-  );
-}
-function TimerLED({ time }: { time: number }) {
-  return (
-    <div
-      className={
-        "timer " + (time <= 5 ? "danger" : time <= 10 ? "warning" : "")
-      }
-    >
-      <span>TEMPO</span>
-      <strong>{String(time).padStart(2, "0")}</strong>
-      <small>SEGUNDOS</small>
-      <div className="timer-track">
-        <i style={{ width: `${(time / 30) * 100}%` }} />
       </div>
     </div>
   );
@@ -132,57 +119,6 @@ function Modal({
     </dialog>
   );
 }
-function StageShell({
-  muted,
-  onSound,
-  children,
-}: {
-  muted: boolean;
-  onSound: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="app is-stage">
-      <div className="stage-lights" aria-hidden="true" />
-      <div className="scanlines" aria-hidden="true" />
-      <main className="frame">
-        <div className="stage-decor" aria-hidden="true">
-          <div className="opening-stars">
-            <i>✦</i>
-            <i>✦</i>
-            <i>✦</i>
-            <i>✦</i>
-            <i>✦</i>
-            <i>✦</i>
-          </div>
-        </div>
-        <header className="topbar">
-          <button
-            className="sound"
-            onClick={onSound}
-            aria-label={muted ? "Ativar som" : "Desativar som"}
-            aria-pressed={!muted}
-          >
-            <span aria-hidden="true">{muted ? "♪" : "♫"}</span>
-            <span className="sound-label">
-              {muted ? " SOM DESLIGADO" : " SOM LIGADO"}
-            </span>
-          </button>
-        </header>
-        {children}
-        <footer>
-          <span className="opening-credit">
-            <span>By Sa1toYK</span>
-            <span className="credit-separator" aria-hidden="true">
-              |
-            </span>
-            <span>Baseado em 'Show do Milhão'</span>
-          </span>
-        </footer>
-      </main>
-    </div>
-  );
-}
 function App() {
   const g = useGame();
   const [rules, setRules] = useState(false);
@@ -260,6 +196,11 @@ function App() {
                   </span>
                   <span className="arrow">→</span>
                 </button>
+                <a className="secondary master-menu-link" href="/?master=1">
+                  <span className="button-icon" aria-hidden="true">✦</span>
+                  <b>SALA AO VIVO</b>
+                  <span className="arrow" aria-hidden="true">→</span>
+                </a>
                 <button className="text-button" onClick={() => setRules(true)}>
                   ⓘ &nbsp; COMO JOGAR
                 </button>
@@ -357,7 +298,7 @@ function App() {
                 >
                   {letters.map((letter, i) => {
                     const state = g.feedback
-                      ? letter === q.correct
+                      ? letter === g.feedback.correct
                         ? "correct"
                         : letter === g.feedback.selected &&
                             g.feedback.winner === null
@@ -407,7 +348,7 @@ function App() {
                               key={letter}
                               className={
                                 "answer " +
-                                (g.feedback && letter === q.correct
+                                (g.feedback && letter === g.feedback.correct
                                   ? "correct"
                                   : "")
                               }
@@ -434,6 +375,7 @@ function App() {
                     CONFIRMAR RESPOSTA →
                   </button>
                 )}
+                {g.gradingError && <p role="alert">{g.gradingError}</p>}
                 {g.feedback && (
                   <div
                     className={
@@ -444,7 +386,7 @@ function App() {
                   >
                     <div>
                       <b>{g.feedback.message}</b>
-                      <p>{q.explanation}</p>
+                      <p>{g.feedback.explanation}</p>
                     </div>
                     <button className="primary" onClick={g.next}>
                       {(g.mode === "solo" && g.feedback.winner === null) ||
@@ -590,8 +532,9 @@ function App() {
   );
 }
 
+const master = new URLSearchParams(location.search).get('master') === '1';
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    {master ? <MasterApp /> : <App />}
   </React.StrictMode>,
 );

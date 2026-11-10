@@ -1,5 +1,5 @@
 import { test, expect, type Page, type TestInfo } from "@playwright/test";
-import { questions } from "../src/data/questions";
+import { serverQuestions as questions } from "../worker/questions.server";
 
 async function audit(
   page: Page,

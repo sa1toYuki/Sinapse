@@ -4,21 +4,31 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && tsc -p tsconfig.worker.json && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "test": "playwright test",
+    "test:master": "playwright test --config playwright.master.config.ts",
+    "test:worker": "npm run build && vitest run",
+    "dev:worker": "npm run build && wrangler dev --local",
     "test:zoom": "npm run build && node scripts/test-zoom.mjs"
   },
   "dependencies": {
+    "qrcode": "^1.5.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.7.0",
+    "@cloudflare/workers-types": "^5.20261110.1",
     "@playwright/test": "^1.65.0",
+    "@types/node": "^24.19.2",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "~5.7.2",
-    "vite": "^6.0.5"
+    "vite": "^6.0.5",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.160.0"
   }
 }

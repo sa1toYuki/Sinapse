@@ -1,7 +1,7 @@
 import { questions, type Letter } from '../data/questions';
 
 export type GameMode = 'solo' | 'multi';
-export type SavedFeedback = { winner: number | null; selected: Letter | null; message: string };
+export type SavedFeedback = { winner: number | null; selected: Letter | null; message: string; correct?: Letter; explanation?: string };
 export type ProgressState = {
   mode: GameMode;
   names: [string, string];
@@ -17,7 +17,7 @@ export type ProgressState = {
 type SaveFile = ProgressState & { version: number; questionBank: string };
 const VERSION = 1;
 const key = (mode: GameMode) => `sinapse:save:${mode}`;
-// The full data participates in the signature, including order and answer text.
+// The signature follows the public question set. Older saves used the full bank.
 function signature(value: string): string {
   let hash = 2166136261;
   for (let i = 0; i < value.length; i++) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
@@ -28,7 +28,7 @@ const isLetter = (x: unknown): x is Letter | null => x === null || (typeof x ===
 function valid(value: unknown, mode: GameMode): value is SaveFile {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const s = value as Record<string, unknown>;
-  if (s.version !== VERSION || s.questionBank !== QUESTION_BANK || s.mode !== mode) return false;
+  if (s.version !== VERSION || (s.questionBank !== QUESTION_BANK && s.questionBank !== '8cc5a049') || s.mode !== mode) return false;
   if (!Array.isArray(s.names) || s.names.length !== 2 || !s.names.every(n => typeof n === 'string' && n.length > 0 && n.length <= 20)) return false;
   if (!Number.isInteger(s.questionIndex) || (s.questionIndex as number) < 0 || (s.questionIndex as number) >= questions.length) return false;
   if (!Array.isArray(s.scores) || s.scores.length !== 2 || !s.scores.every(n => Number.isSafeInteger(n) && n >= 0)) return false;
@@ -37,7 +37,9 @@ function valid(value: unknown, mode: GameMode): value is SaveFile {
   if (s.phase === 'answering') return s.feedback === null && !(mode === 'multi' && s.locked.every(Boolean));
   if (s.phase !== 'feedback' || !s.feedback || typeof s.feedback !== 'object' || Array.isArray(s.feedback)) return false;
   const f = s.feedback as Record<string, unknown>;
-  return (f.winner === null || f.winner === 0 || (mode === 'multi' && f.winner === 1)) && isLetter(f.selected) && typeof f.message === 'string' && f.message.length > 0 && f.message.length <= 100;
+  return (f.winner === null || f.winner === 0 || (mode === 'multi' && f.winner === 1)) && isLetter(f.selected) && typeof f.message === 'string' && f.message.length > 0 && f.message.length <= 100 &&
+    (f.correct === undefined || (f.correct !== null && isLetter(f.correct))) &&
+    (f.explanation === undefined || (typeof f.explanation === 'string' && f.explanation.length <= 500));
 }
 export function saveProgress(mode: GameMode, state: ProgressState): void {
   try { const data: SaveFile = { ...state, version: VERSION, questionBank: QUESTION_BANK }; if (valid(data, mode)) localStorage.setItem(key(mode), JSON.stringify(data)); } catch { /* Storage is optional. */ }

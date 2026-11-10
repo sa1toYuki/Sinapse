@@ -1,6 +1,6 @@
 # Sinapse
 
-Quiz estático para apresentação escolar, feito com Vite, React e TypeScript. Não há servidor, banco de dados ou chamadas de API em tempo de execução. O áudio é sintetizado no navegador e começa desligado.
+Quiz para apresentação escolar, feito com Vite, React e TypeScript. O Worker implementa o protocolo de salas em tempo real descrito no [SPEC.md](SPEC.md), com um Durable Object SQLite por PIN e ranking final no D1. O áudio é sintetizado no navegador e começa desligado.
 
 ## Rodar localmente
 
@@ -11,7 +11,18 @@ npm install
 npm run dev
 ```
 
-Abra o endereço exibido pelo Vite. Para conferir a versão de produção localmente, execute `npm run build` e `npm run preview`.
+Abra o endereço exibido pelo Vite para jogar os modos solo e dois jogadores no mesmo dispositivo. Esses modos usam a correção do servidor Vite, inclusive com `npm run build` e `npm run preview`.
+
+Para rodar a API das salas com D1 local:
+
+```bash
+npx wrangler d1 migrations apply DB --local
+npm run dev:worker
+```
+
+`POST /api/rooms` com corpo vazio retorna `{ pin, masterToken }`. Abra `GET /api/rooms/<pin>/ws` com upgrade WebSocket e `Origin` da aplicação. Envie `master.resume` com o segredo do MASTER ou `player.join` com PIN e nome. `player.resume` usa o `playerId` e o `reconnectToken` retornados na entrada. O [protocolo JSON](SPEC.md#6-protocolo-json-v1) detalha as mensagens.
+
+Abra **Sala ao vivo** no menu servido pelo Worker, ou acesse `/?master=1`, para controlar a partida no telão. O QR code aponta para `/?pin=<pin>`, o endereço reservado para a futura tela PLAYER. Os modos locais funcionam no Vite dev/preview. A correção de prática fica no Vite para preservar o gabarito das salas públicas.
 
 ## Layout responsivo e validação
 
@@ -19,45 +30,20 @@ O layout respeita o zoom do navegador e usa `min-height: 100dvh`, tokens em `rem
 
 Execute `npm test` para a matriz de telas e `npm run test:zoom` para zoom real de 100% a 400% em perfis temporários do Edge. Consulte o [relatório de responsividade](docs/responsividade.md) para os breakpoints, regras removidas, resultados e instruções de reprodução.
 
+`npm run test:worker` compila o projeto e roda os testes de regras e integração no Workerd, com Durable Objects, WebSockets e D1 locais. O pool precisa de acesso à rede de loopback.
+
+`npm run test:master` percorre uma partida pelo navegador, com jogadores simulados conectados ao Worker local, em dois tamanhos de tela.
+
 ## Editar o conteúdo
 
-- `src/data/questions.ts`: 17 perguntas, cinco opções fixas, resposta, explicação e fonte. Preserve a ordem e os IDs; a dificuldade é definida por `level`.
+- `src/data/questions.ts` contém o conteúdo público das 17 perguntas. `worker/questions.server.ts` contém respostas, explicações e fontes. Preserve os IDs e a ordem correspondente, e atualize `questionSetVersion` ao mudar o banco. O build do navegador rejeita módulos do Worker e desativa source maps.
 - `src/data/scoring.ts`: valores de cada degrau. No modo solo, ao errar ou esgotar o tempo, vale o último degrau acertado; sem nenhum acerto, zero. Ao concluir todas, vale o último degrau.
 - No modo multi cada acerto soma o valor da pergunta mais 10 pontos por segundo restante, arredondado para cima, até 300 pontos. Quem erra fica bloqueado na rodada. O relógio mede tempo real; ambos erram ou o tempo esgota: ninguém pontua. Empates são declarados.
 - `src/styles/tokens.css`: cores e tokens. `src/audio/sound.ts`: efeitos sintetizados. `src/useGame.ts`: estado, regras e controles.
 
-## Publicar no Cloudflare Pages
+## Configurar o Worker para publicação
 
-1. Envie este diretório a um repositório Git e conecte-o ao Cloudflare Pages, ou carregue a pasta de build pelo fluxo de upload direto do Pages.
-2. No projeto Pages, selecione Node.js **22** ou **24**; por exemplo, defina `NODE_VERSION=22` nas variáveis de ambiente.
-3. Comando de build: `npm run build`.
-4. Diretório de saída: `dist`.
-5. Publique. Todos os recursos necessários ao jogo estão no build; nenhuma chave ou serviço externo é necessário.
-
-## Conferência das perguntas
-
-| # | Resposta | Justificativa |
-|---|---|---|
-| 1 | B — Brasília | É a capital federal desde 1960. |
-| 2 | D — Marte | Minerais ricos em ferro dão aparência avermelhada à superfície. |
-| 3 | A — Frequência modulada | FM transmite informação pela variação da frequência. |
-| 4 | E — Leonardo da Vinci | Ele pintou a Mona Lisa. |
-| 5 | C — Seis | Uma equipe de voleibol de quadra tem seis jogadores em quadra. |
-| 6 | B — 1889 | A República foi proclamada em 15 de novembro de 1889. |
-| 7 | A — Videocassete | Aparelho que reproduz e pode gravar fitas VHS. |
-| 8 | D — Gás carbônico | É consumido pelas plantas na fotossíntese. |
-| 9 | E — Piano | Suas teclas acionam martelos que percutem cordas. |
-| 10 | C — CD | Disco óptico que armazena áudio digital. |
-| 11 | B — Linha do Equador | Latitude zero, divide Norte e Sul. |
-| 12 | A — Tim Berners-Lee | Apresentou a proposta da Web no CERN em 1989. |
-| 13 | D — Machado de Assis | Autor de Dom Casmurro. |
-| 14 | E — Au | Símbolo químico do ouro, do latim aurum. |
-| 15 | C — Informação de cor | A crominância carrega a informação de cor no sinal de vídeo. |
-| 16 | B — Inca | A cidade de Machu Picchu foi construída pelos incas. |
-| 17 | A — Estratosfera | Contém a maior parte do ozônio atmosférico. |
-
-Cada entrada em `questions.ts` inclui um link de referência para consulta. As alternativas permanecem fixas na ordem do arquivo.
-
+Crie o banco `sinapse` no D1 e substitua o `database_id` de exemplo em `wrangler.jsonc` pelo ID do banco. Aplique `npx wrangler d1 migrations apply DB --remote`, faça `npm run build` e publique com `npx wrangler deploy`. O upgrade aceita a origem do próprio Worker. Para upgrades iniciados em outro domínio, configure `ALLOWED_ORIGINS` com as origens exatas separadas por vírgula.
 
 ## Salvar e retomar
 

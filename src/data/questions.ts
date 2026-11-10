@@ -1,23 +1,26 @@
-export type Letter = 'A'|'B'|'C'|'D'|'E';
-export type Question = { id:number; level:1|2|3|4; category:string; text:string; options:Record<Letter,string>; correct:Letter; explanation:string; source?:string };
-const make = (id:number, level:1|2|3|4, category:string, text:string, answers:[string,string,string,string,string], correct:Letter, explanation:string, source?:string):Question => ({id,level,category,text,options:{A:answers[0],B:answers[1],C:answers[2],D:answers[3],E:answers[4]},correct,explanation,source});
-export const questions:Question[] = [
-make(1,1,'Geografia','Qual é a capital do Brasil?',['Rio de Janeiro','Brasília','São Paulo','Salvador','Belo Horizonte'],'B','Brasília é a capital federal do Brasil desde 1960.','https://science.nasa.gov/photojournal/brasilia-brazil/'),
-make(2,1,'Ciência','Qual planeta é conhecido como Planeta Vermelho?',['Vênus','Júpiter','Mercúrio','Marte','Netuno'],'D','Marte tem aparência avermelhada devido a minerais ricos em ferro em sua superfície.','https://science.nasa.gov/mars/facts/'),
-make(3,1,'Rádio e TV','Em um rádio, o que as letras FM significam?',['Frequência modulada','Faixa musical','Frequência média','Formato musical','Faixa multiplex'],'A','FM significa frequência modulada: a informação é transmitida pela variação da frequência da onda.','https://www.britannica.com/technology/frequency-modulation'),
-make(4,1,'Arte','Quem pintou a Mona Lisa?',['Vincent van Gogh','Tarsila do Amaral','Pablo Picasso','Claude Monet','Leonardo da Vinci'],'E','A Mona Lisa é uma pintura de Leonardo da Vinci.','https://collections.louvre.fr/en/ark:/53355/cl010062370'),
-make(5,1,'Esportes','Quantos jogadores de cada equipe ficam em quadra no voleibol de quadra?',['Cinco','Sete','Seis','Onze','Quatro'],'C','No voleibol de quadra, cada equipe joga com seis pessoas em quadra.','https://www.fivb.com/volleyball/the-game/'),
-make(6,2,'História','Em que ano foi proclamada a República no Brasil?',['1822','1889','1500','1922','1964'],'B','A República foi proclamada em 15 de novembro de 1889.','https://atom-museurepublica.museus.gov.br/index.php/proclamacao-da-republica'),
-make(7,2,'Rádio e TV','Qual aparelho era usado para reproduzir fitas VHS?',['Videocassete','Vitrola','Projetor de slides','Toca-discos','Rádio de pilha'],'A','O videocassete reproduzia e também podia gravar vídeo em fitas VHS.','https://www.britannica.com/technology/videocassette-recorder'),
-make(8,2,'Ciência','Qual gás as plantas absorvem da atmosfera na fotossíntese?',['Oxigênio','Hélio','Hidrogênio','Gás carbônico','Neônio'],'D','Na fotossíntese, plantas usam gás carbônico e água para produzir açúcares.','https://www.britannica.com/science/photosynthesis'),
-make(9,2,'Cultura','Qual destes instrumentos possui teclas, pedais e cordas percutidas por martelos?',['Flauta','Violino','Tamborim','Trompete','Piano'],'E','No piano acústico, martelos acionados pelas teclas percutem as cordas.','https://www.britannica.com/art/piano'),
-make(10,2,'Tecnologia','Qual mídia óptica era usada para ouvir álbuns de música nos anos 1990?',['Disquete','Fita cassete','CD','Cartucho','Fita VHS'],'C','O CD é um disco óptico usado para armazenar áudio digital.','https://www.britannica.com/technology/compact-disc'),
-make(11,3,'Geografia','Qual linha imaginária divide a Terra em hemisférios Norte e Sul?',['Trópico de Capricórnio','Linha do Equador','Meridiano de Greenwich','Círculo Polar Ártico','Trópico de Câncer'],'B','A Linha do Equador está na latitude zero e separa os hemisférios Norte e Sul.','https://www.britannica.com/place/Equator'),
-make(12,3,'Tecnologia','Quem propôs a World Wide Web no CERN em 1989?',['Tim Berners-Lee','Alan Turing','Ada Lovelace','Steve Jobs','Bill Gates'],'A','Tim Berners-Lee apresentou a proposta da Web no CERN em 1989.','https://home.cern/science/computing/birth-web/short-history-web'),
-make(13,3,'Literatura','Quem escreveu o romance Dom Casmurro?',['Clarice Lispector','José de Alencar','Graciliano Ramos','Machado de Assis','Jorge Amado'],'D','Dom Casmurro é um romance de Machado de Assis, publicado em 1899.','https://www.britannica.com/topic/Dom-Casmurro'),
-make(14,3,'Ciência','Qual é o símbolo químico do elemento ouro?',['Ag','Fe','O','Hg','Au'],'E','Au vem de aurum, nome latino do ouro.','https://www.britannica.com/science/gold-chemical-element'),
-make(15,4,'Rádio e TV','Em uma transmissão analógica de TV em cores, o que a crominância representa?',['O volume do som','A nitidez do áudio','A informação de cor','A velocidade da fita','A duração do programa'],'C','Crominância é a parte do sinal de vídeo que carrega informação de cor.','https://www.keysight.com/used/gr/en/knowledge/glossary/oscilloscopes/what-is-a-composite-video-signal'),
-make(16,4,'História','Qual civilização construiu a cidade de Machu Picchu?',['Romana','Inca','Egípcia','Grega','Fenícia'],'B','Machu Picchu foi construída pelos incas nos Andes.','https://whc.unesco.org/en/list/274/'),
-make(17,4,'Ciência','Qual camada da atmosfera contém a maior parte da camada de ozônio?',['Estratosfera','Troposfera','Termosfera','Exosfera','Mesosfera'],'A','A maior parte do ozônio atmosférico se concentra na estratosfera.','https://www.epa.gov/ozone-layer-protection/basic-ozone-layer-science')
-];
+export type Letter = 'A' | 'B' | 'C' | 'D' | 'E';
+export type Question = { id: number; level: 1 | 2 | 3 | 4; category: string; text: string; options: Record<Letter, string> };
 
+function make(id: number, level: Question['level'], category: string, text: string, [A, B, C, D, E]: [string, string, string, string, string]): Question {
+  return { id, level, category, text, options: { A, B, C, D, E } };
+}
+
+export const questions = [
+  make(1,1,'Geografia','Qual é a capital do Brasil?',['Rio de Janeiro','Brasília','São Paulo','Salvador','Belo Horizonte']),
+  make(2,1,'Ciência','Qual planeta é conhecido como Planeta Vermelho?',['Vênus','Júpiter','Mercúrio','Marte','Netuno']),
+  make(3,1,'Rádio e TV','Em um rádio, o que as letras FM significam?',['Frequência modulada','Faixa musical','Frequência média','Formato musical','Faixa multiplex']),
+  make(4,1,'Arte','Quem pintou a Mona Lisa?',['Vincent van Gogh','Tarsila do Amaral','Pablo Picasso','Claude Monet','Leonardo da Vinci']),
+  make(5,1,'Esportes','Quantos jogadores de cada equipe ficam em quadra no voleibol de quadra?',['Cinco','Sete','Seis','Onze','Quatro']),
+  make(6,2,'História','Em que ano foi proclamada a República no Brasil?',['1822','1889','1500','1922','1964']),
+  make(7,2,'Rádio e TV','Qual aparelho era usado para reproduzir fitas VHS?',['Videocassete','Vitrola','Projetor de slides','Toca-discos','Rádio de pilha']),
+  make(8,2,'Ciência','Qual gás as plantas absorvem da atmosfera na fotossíntese?',['Oxigênio','Hélio','Hidrogênio','Gás carbônico','Neônio']),
+  make(9,2,'Cultura','Qual destes instrumentos possui teclas, pedais e cordas percutidas por martelos?',['Flauta','Violino','Tamborim','Trompete','Piano']),
+  make(10,2,'Tecnologia','Qual mídia óptica era usada para ouvir álbuns de música nos anos 1990?',['Disquete','Fita cassete','CD','Cartucho','Fita VHS']),
+  make(11,3,'Geografia','Qual linha imaginária divide a Terra em hemisférios Norte e Sul?',['Trópico de Capricórnio','Linha do Equador','Meridiano de Greenwich','Círculo Polar Ártico','Trópico de Câncer']),
+  make(12,3,'Tecnologia','Quem propôs a World Wide Web no CERN em 1989?',['Tim Berners-Lee','Alan Turing','Ada Lovelace','Steve Jobs','Bill Gates']),
+  make(13,3,'Literatura','Quem escreveu o romance Dom Casmurro?',['Clarice Lispector','José de Alencar','Graciliano Ramos','Machado de Assis','Jorge Amado']),
+  make(14,3,'Ciência','Qual é o símbolo químico do elemento ouro?',['Ag','Fe','O','Hg','Au']),
+  make(15,4,'Rádio e TV','Em uma transmissão analógica de TV em cores, o que a crominância representa?',['O volume do som','A nitidez do áudio','A informação de cor','A velocidade da fita','A duração do programa']),
+  make(16,4,'História','Qual civilização construiu a cidade de Machu Picchu?',['Romana','Inca','Egípcia','Grega','Fenícia']),
+  make(17,4,'Ciência','Qual camada da atmosfera contém a maior parte da camada de ozônio?',['Estratosfera','Troposfera','Termosfera','Exosfera','Mesosfera']),
+];

@@ -4,3 +4,4 @@ dist/
 artifacts/
 test-results/
 playwright-report/
+.wrangler/
