@@ -94,8 +94,9 @@ test('entra pelo QR, valida o nome, responde uma vez e recupera a sessão', asyn
     await expect(second.getByRole('heading', { name: 'Errou' })).toBeVisible();
     await expect(second.getByText('2º lugar')).toBeVisible();
     await expect(second.getByText('+0 pts')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Top 5' })).toBeVisible();
     await first.reload();
-    await expect(first.getByRole('heading', { name: 'Acertou' })).toBeVisible();
+    await expect(first.getByText('1º lugar')).toBeVisible();
     await expect(first.getByText('1º lugar')).toBeVisible();
   } finally {
     await firstContext.close();

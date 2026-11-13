@@ -2,7 +2,7 @@ import { applyD1Migrations, evictDurableObject, runDurableObjectAlarm, runInDura
 import { env, exports } from 'cloudflare:workers';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { Env } from '../worker';
-import type { Round } from '../worker/rules';
+import { REVEAL_MS, type Round } from '../worker/rules';
 
 const bindings = env as Env & { TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1] };
 const worker = exports.default as Fetcher;
@@ -203,8 +203,38 @@ describe('sala no runtime Workers', () => {
       storage.sql.exec("UPDATE jobs SET due = ? WHERE kind = 'deadline'", past);
     });
     expect(await runDurableObjectAlarm(room.stub)).toBe(true);
-    await host.find(frame => frame.type === 'question_reveal');
+    const reveal = await host.find(frame => frame.type === 'question_reveal');
+    const revealDue = await runInDurableObject(room.stub, (_instance, { storage }) => storage.getAlarm());
+    expect(revealDue).toBeLessThan(retry);
+    expect(Number(revealDue) - Number(reveal.serverNow)).toBeLessThanOrEqual(REVEAL_MS);
+    expect(Number(revealDue) - Number(reveal.serverNow)).toBeGreaterThan(0);
+    await runInDurableObject(room.stub, (_instance, { storage }) => {
+      storage.sql.exec("UPDATE jobs SET due = ? WHERE kind = 'reveal'", Date.now() - 1);
+    });
+    expect(await runDurableObjectAlarm(room.stub)).toBe(true);
+    await host.find(frame => frame.type === 'leaderboard');
     expect(await runInDurableObject(room.stub, (_instance, { storage }) => storage.getAlarm())).toBe(retry);
+  });
+
+  it('abre o ranking no prazo após a hibernação, mesmo sem o MASTER conectado', async () => {
+    const room = await create();
+    const host = await master(room);
+    const player = await join(room.pin, 'Jogador');
+    await host.command('master.start');
+    await player.request('player.answer', { questionId: 1, choice: 'B' });
+    const reveal = await player.find(frame => frame.type === 'question_reveal');
+    expect(await host.command('master.next')).toMatchObject({ code: 'WRONG_PHASE' });
+    expect(await runDurableObjectAlarm(room.stub)).toBe(true);
+    expect(player.frames.some(frame => frame.type === 'leaderboard')).toBe(false);
+    host.socket.close(1000);
+    await evictDurableObject(room.stub);
+    const ranking = await player.find(frame => frame.type === 'leaderboard');
+    expect(ranking).toMatchObject({ revision: Number(reveal.revision) + 1, myRank: 1 });
+    expect(Number(ranking.serverNow) - Number(reveal.serverNow)).toBeGreaterThanOrEqual(REVEAL_MS - 25);
+    const resumed = await master(room);
+    expect(await resumed.request('room.sync')).toMatchObject({ phase: 'LEADERBOARD' });
+    expect(await resumed.command('master.next')).toMatchObject({ type: 'command_ack' });
+    expect(await resumed.find(frame => frame.type === 'question_open')).toMatchObject({ questionIndex: 2 });
   });
 
   it('expulsa, libera nome e invalida o token antigo', async () => {
@@ -270,7 +300,10 @@ describe('sala no runtime Workers', () => {
     await host.command('master.start');
     for (let index = 1; index <= 17; index++) {
       expect(await host.command('master.end_question')).toMatchObject({ type: 'command_ack' });
-      expect(await host.command('master.show_leaderboard')).toMatchObject({ type: 'command_ack' });
+      await runInDurableObject(room.stub, (_instance, { storage }) => {
+        storage.sql.exec("UPDATE jobs SET due = ? WHERE kind = 'reveal'", Date.now() - 1);
+      });
+      expect(await runDurableObjectAlarm(room.stub)).toBe(true);
       if (index < 17) expect(await host.command('master.next')).toMatchObject({ type: 'command_ack' });
     }
     const leaderboard = await host.find(frame => frame.type === 'leaderboard');

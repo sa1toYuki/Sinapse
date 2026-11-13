@@ -26,6 +26,11 @@ test('npm run dev abre uma sala pelo menu e inicia uma pergunta com um jogador',
     await page.getByRole('button', { name: 'Iniciar partida' }).click();
     await expect(page.getByRole('button', { name: 'Encerrar pergunta' })).toBeVisible();
     await expect(player.getByRole('group', { name: 'Alternativas' }).getByRole('button')).toHaveText(['A', 'B', 'C', 'D', 'E']);
+    await player.getByRole('button', { name: 'B', exact: true }).tap();
+    await expect(player.getByRole('heading', { name: /^(Acertou|Errou)$/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Top 5' })).toBeVisible();
+    await page.getByRole('button', { name: 'Próxima pergunta' }).click();
+    await expect(player.getByRole('group', { name: 'Alternativas' })).toBeVisible();
 
     const ranking = await page.request.get('/api/ranking');
     expect(ranking.status()).toBe(200);

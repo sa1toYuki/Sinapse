@@ -8,6 +8,7 @@ async function fits(page: Page) {
 }
 
 test('conduz a partida pelo Worker até o pódio e retoma a sala após recarregar', async ({ page, context }, info) => {
+  test.setTimeout(120_000);
   await page.goto('/');
   await page.getByRole('button', { name: 'Jogar agora' }).click();
   await page.getByRole('link', { name: 'Sala ao vivo' }).click();
@@ -63,7 +64,7 @@ test('conduz a partida pelo Worker até o pódio e retoma a sala após recarrega
   await expect(correct).toContainText(serverQuestions[0].options[serverQuestions[0].correct]);
   await fits(page);
 
-  await page.getByRole('button', { name: 'Ver ranking' }).click();
+  await expect(page.getByRole('button', { name: 'Ver ranking' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: 'Top 5' })).toBeVisible();
   await expect(page.locator('.master-ranking li')).toHaveCount(5);
   await expect(page.locator('.master-ranking li').first()).toContainText(names[0]);
@@ -73,7 +74,7 @@ test('conduz a partida pelo Worker até o pódio e retoma a sala após recarrega
     await page.getByRole('button', { name: 'Próxima pergunta' }).click();
     await expect(page.getByRole('heading', { name: question.text })).toBeVisible();
     await page.getByRole('button', { name: 'Encerrar pergunta' }).click();
-    await page.getByRole('button', { name: 'Ver ranking' }).click();
+    await expect(page.getByRole('heading', { name: 'Top 5' })).toBeVisible();
   }
   await page.getByRole('button', { name: 'Ver pódio' }).click();
   await expect(page.getByRole('heading', { name: 'Pódio final' })).toBeVisible();

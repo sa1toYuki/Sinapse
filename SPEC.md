@@ -23,7 +23,7 @@ As cores dos botões A–E devem ser estáveis e corresponder às alternativas d
 4. O banco completo de perguntas, inclusive `correct`, fica **somente no lado servidor**. O build entregue a PLAYER e MASTER não inclui gabarito embutido em JavaScript, HTML, mapas de origem públicos ou respostas antecipadas do protocolo. Antes da revelação, o MASTER recebe texto e alternativas; PLAYER recebe apenas `questionId`, letras/cores e prazo. O gabarito sai do servidor apenas em `question_reveal`.
 5. Ao terminar, o DO grava o resultado final no D1 com chave idempotente de partida e linhas de classificação. Se a escrita falhar, conserva um registro de gravação pendente no storage e tenta novamente por alarm; o pódio pode ser mostrado com o resultado canônico do DO, mas deve indicar quando a persistência ainda não foi confirmada. **D1 contém apenas `games` e `game_results`**, sem reserva de PIN.
 6. Na criação, o Worker sorteia um PIN e chama o DO `idFromName(pin)`. O DO faz a verificação/criação atomicamente: se já existe partida ativa **ou resultado final retido até a limpeza**, responde `PIN_OCCUPIED` ao Worker, que sorteia outro PIN; caso contrário, cria novo `gameId` e credenciais. Um alarm de limpeza apaga o estado da sala após encerramento ou inatividade. A validade temporal e o intervalo de retenção ainda precisam ser definidos.
-7. O DO mantém no storage uma fila de tarefas pendentes: prazo da pergunta, limpeza e retry do D1. Como há **um único alarm por DO**, agenda sempre o menor instante pendente; ao disparar, processa as tarefas vencidas e agenda o próximo. O `answer_count` usa throttle **em memória, leading + trailing, janela de 250 ms**, sem alarm. O último flush ocorre antes da revelação/fechamento da pergunta.
+7. O DO mantém no storage uma fila com o prazo da pergunta, a transição automática para o ranking, a limpeza e o retry do D1. Como há **um único alarm por DO**, agenda sempre o menor instante pendente. Ao disparar, processa as tarefas vencidas e agenda o próximo prazo. O `answer_count` usa throttle **em memória, leading + trailing, janela de 250 ms**, sem alarm. O último flush ocorre antes da revelação/fechamento da pergunta.
 
 As regras acima seguem a documentação oficial de [WebSocket Hibernation](https://developers.cloudflare.com/durable-objects/best-practices/websockets/), [storage SQLite e `transactionSync`](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/), [alarms](https://developers.cloudflare.com/durable-objects/api/alarms/) e [static assets no Worker](https://developers.cloudflare.com/workers/static-assets/). Hibernação preserva WebSockets, mas reinicializa memória; o throttle em memória pode manter o DO ativo durante a janela de 250 ms. Uma retomada depois de hibernação reconstrói contagens a partir do storage, sem depender de throttle pendente.
 
@@ -43,12 +43,12 @@ As regras acima seguem a documentação oficial de [WebSocket Hibernation](https
 ```text
 LOBBY --master.start--> QUESTION_OPEN
 QUESTION_OPEN --deadline (30 s), todos os conectados responderam ou master.end_question--> QUESTION_REVEAL
-QUESTION_REVEAL --master.show_leaderboard--> LEADERBOARD
+QUESTION_REVEAL --automaticamente após 3 s--> LEADERBOARD
 LEADERBOARD --master.next, perguntas 1–16--> QUESTION_OPEN
 LEADERBOARD --master.next, pergunta 17--> FINAL_PODIUM
 ```
 
-Há exatamente 17 perguntas, na ordem definida pelo conteúdo da partida. `master.start` exige ao menos um PLAYER no lobby. Cada `QUESTION_OPEN` tem prazo máximo de 30.000 ms contados pelo servidor desde `openedAt`; `deadlineAt = openedAt + 30.000`. A pergunta fecha no primeiro destes eventos: prazo, todos os jogadores **conectados e ainda na sala** responderam, ou `master.end_question`. O fechamento por unanimidade exige ao menos um jogador conectado; com zero conectados, a pergunta permanece aberta até o prazo ou comando do MASTER. Ao fechar, o DO computa respostas ausentes, fixa resultados e entra em `QUESTION_REVEAL`. O MASTER decide quando mostrar ranking e avançar; cada comando só vale na fase correspondente. Comandos repetidos com o mesmo `commandId` são idempotentes. `FINAL_PODIUM` é terminal para a partida.
+Há exatamente 17 perguntas, na ordem definida pelo conteúdo da partida. `master.start` exige ao menos um PLAYER no lobby. Cada `QUESTION_OPEN` tem prazo máximo de 30.000 ms contados pelo servidor desde `openedAt`. O `deadlineAt` é `openedAt + 30.000`. A pergunta fecha ao vencer o prazo, quando todos os jogadores **conectados e ainda na sala** respondem ou quando o MASTER envia `master.end_question`. O fechamento por unanimidade exige ao menos um jogador conectado. Ao fechar, o DO computa respostas ausentes, fixa resultados e entra em `QUESTION_REVEAL`. Após 3 segundos, o DO publica o ranking automaticamente, mesmo com o MASTER desconectado. Em `LEADERBOARD`, o MASTER decide quando avançar. Comandos repetidos com o mesmo `commandId` são idempotentes. `FINAL_PODIUM` é terminal para a partida.
 
 Cada mudança de fase aumenta `revision` monotônico. O servidor envia `serverNow` (epoch ms) e, quando aplicável, `deadlineAt`. Cliente ignora eventos com revisão anterior ao `snapshot` mais recente. Ao perder conexão, deixa de aceitar toque local até reconectar; a UI pode manter timer estimado apenas como indicação visual.
 
@@ -69,7 +69,6 @@ Todas as mensagens WebSocket são objetos JSON com `v: 1` e `type`. O PIN usado 
 | `room.sync` | MASTER ou PLAYER autenticado | `requestId` | Solicita snapshot da sala. |
 | `master.end_question` | MASTER | `commandId`, `requestId` | Encerra imediatamente QUESTION_OPEN e entra em QUESTION_REVEAL. |
 | `master.kick` | MASTER | `playerId`, `commandId`, `requestId` | Remove jogador, libera nome/vaga, invalida token e fecha conexão. |
-| `master.show_leaderboard` | MASTER | `commandId`, `requestId` | QUESTION_REVEAL → LEADERBOARD. |
 | `master.next` | MASTER | `commandId`, `requestId` | LEADERBOARD → pergunta seguinte ou FINAL_PODIUM. |
 
 ### Servidor → cliente

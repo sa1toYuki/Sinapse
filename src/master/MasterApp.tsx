@@ -177,9 +177,7 @@ export function MasterApp() {
       <div className="master-round master-reveal">
         <Question index={view.questionIndex} text={question.text} options={question.options}
           correct={view.reveal?.correct} counts={view.reveal?.counts} />
-        <div className="master-round-control">
-          {action('Ver ranking', () => room.send('master.show_leaderboard'), !view.reveal)}
-        </div>
+        {connection === 'paused' && <div className="master-round-control">{action('Retomar sala', room.resume)}</div>}
       </div>
     );
   } else if (view.phase === 'FINAL_PODIUM') {

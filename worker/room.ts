@@ -3,14 +3,14 @@ import type { Letter } from '../src/data/questions';
 import { choices, letters, newToken, parseMessage, sameHash, tokenHash, validPin, type Message } from './protocol';
 import { questionSetVersion, serverQuestions } from './questions.server';
 import { rankingId } from './ranking';
-import { MAX_PLAYERS, scoreAnswer, shouldClose, transition, type Round } from './rules';
+import { MAX_PLAYERS, REVEAL_MS, scoreAnswer, shouldClose, transition, type Round } from './rules';
 import type { Env } from './index';
 
 type RoomState = Round & { gameId: string; pin: string; masterHash: string; startedAt: number | null; finishedAt: number | null; persisted: boolean };
 type Player = { id: string; name: string; tokenHash: string; joined: number; score: number; responseTimeMs: number; lastPoints: number };
 type Answer = { choice: Letter; acceptedAt: number };
 type Peer = { pin: string; openedAt: number; gameId?: string; role?: 'MASTER' | 'PLAYER'; playerId?: string };
-type AlarmKind = 'deadline' | 'cleanup' | 'd1';
+type AlarmKind = 'deadline' | 'reveal' | 'cleanup' | 'd1';
 type AlarmJob = { kind: AlarmKind; due: number; attempts: number };
 type Bucket = { remaining: number; updatedAt: number };
 type Payload = Record<string, unknown>;
@@ -60,6 +60,13 @@ export class Room extends DurableObject<Env> {
       CREATE TABLE IF NOT EXISTS commands (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS jobs (kind TEXT PRIMARY KEY, due INTEGER NOT NULL, attempts INTEGER NOT NULL DEFAULT 0);
     `);
+    // Rooms already in reveal when this version ships have no reveal job yet.
+    if (this.state()?.phase === 'QUESTION_REVEAL' && !this.sql.exec("SELECT 1 FROM jobs WHERE kind = 'reveal'").toArray().length) {
+      ctx.blockConcurrencyWhile(async () => {
+        this.job('reveal', Date.now() + REVEAL_MS);
+        await this.schedule();
+      });
+    }
   }
 
   private state() { return this.storage.kv.get<RoomState>('room'); }
@@ -340,6 +347,7 @@ export class Room extends DurableObject<Env> {
       }
       remember?.();
       this.sql.exec("DELETE FROM jobs WHERE kind = 'deadline'");
+      this.job('reveal', now + REVEAL_MS);
       this.touch(updated, now);
       this.save(updated);
     });
@@ -534,7 +542,7 @@ export class Room extends DurableObject<Env> {
     let state = this.state();
     const now = Date.now();
     if (!state) return;
-    const jobs = this.sql.exec<AlarmJob>("SELECT * FROM jobs WHERE due <= ? ORDER BY due, CASE kind WHEN 'deadline' THEN 0 WHEN 'd1' THEN 1 ELSE 2 END", now).toArray();
+    const jobs = this.sql.exec<AlarmJob>("SELECT * FROM jobs WHERE due <= ? ORDER BY due, CASE kind WHEN 'deadline' THEN 0 WHEN 'reveal' THEN 1 WHEN 'd1' THEN 2 ELSE 3 END", now).toArray();
     for (const job of jobs) {
       // A preceding job or an event during D1 I/O may have changed the queue.
       const current = this.sql.exec<AlarmJob>('SELECT * FROM jobs WHERE kind = ?', job.kind).toArray()[0];
@@ -543,6 +551,14 @@ export class Room extends DurableObject<Env> {
       if (job.kind === 'deadline') {
         if (state.phase === 'QUESTION_OPEN' && now >= state.deadlineAt!) this.closeQuestion(state, now);
         else this.sql.exec("DELETE FROM jobs WHERE kind = 'deadline'");
+      } else if (job.kind === 'reveal') {
+        const next = transition(state, 'reveal_elapsed', now, 0, questionCount);
+        const updated = next && { ...state, ...next };
+        this.storage.transactionSync(() => {
+          this.sql.exec("DELETE FROM jobs WHERE kind = 'reveal'");
+          if (updated) this.save(updated);
+        });
+        if (updated) this.publishPhase(updated);
       } else if (job.kind === 'd1') {
         if (state.phase === 'FINAL_PODIUM' && !state.persisted) await this.persist(state, job, now);
         else this.sql.exec("DELETE FROM jobs WHERE kind = 'd1'");

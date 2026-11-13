@@ -41,7 +41,7 @@ type View = { revision: number; questionIndex: number } & (
   | { phase: 'FINAL_PODIUM'; rankingId: string; persisted: boolean }
 );
 
-export type MasterCommand = 'master.start' | 'master.end_question' | 'master.show_leaderboard' | 'master.next';
+export type MasterCommand = 'master.start' | 'master.end_question' | 'master.next';
 const STORAGE_KEY = 'sinapse:master';
 
 function validCredentials(value: unknown): value is Credentials {

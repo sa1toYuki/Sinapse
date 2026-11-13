@@ -1,7 +1,7 @@
 import type { Letter } from '../src/data/questions';
 import { choices } from '../src/data/choices';
 import { normalizeName, validPin } from '../src/rooms/identity';
-import type { PhaseAction } from './rules';
+import type { MasterAction } from './rules';
 
 export { choices, validPin };
 export const letters = choices.map(({ letter }) => letter);
@@ -19,7 +19,7 @@ export type Message =
   | (Request & { type: 'master.resume'; pin: string; masterToken: string })
   | (Request & { type: 'player.answer'; questionId: number; choice: Letter })
   | (Request & { type: 'room.sync' })
-  | (Command & { type: Exclude<PhaseAction, 'close'> })
+  | (Command & { type: MasterAction })
   | (Command & { type: 'master.kick'; playerId: string });
 
 export function parseMessage(raw: string | ArrayBuffer): { message?: Message; requestId?: string; code?: 'INVALID_PIN' | 'BAD_TOKEN' | 'INVALID_PAYLOAD' } {
@@ -58,7 +58,7 @@ export function parseMessage(raw: string | ArrayBuffer): { message?: Message; re
     case 'master.kick':
       if (!exact('playerId', 'commandId') || !validId(playerId) || !validId(commandId)) return invalid;
       return { message: { type, requestId, commandId, playerId } };
-    case 'master.start': case 'master.end_question': case 'master.show_leaderboard': case 'master.next':
+    case 'master.start': case 'master.end_question': case 'master.next':
       return exact('commandId') && validId(commandId) ? { message: { type, requestId, commandId } } : invalid;
     default:
       return invalid;

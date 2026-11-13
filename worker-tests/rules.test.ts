@@ -27,7 +27,8 @@ describe('fases', () => {
       expect(transition(round, 'master.next', 100, 1, 17)).toBeNull();
       round = transition(round, 'master.end_question', 100, 1, 17)!;
       expect(round.phase).toBe('QUESTION_REVEAL');
-      round = transition(round, 'master.show_leaderboard', 100, 1, 17)!;
+      expect(transition(round, 'master.next', 100, 1, 17)).toBeNull();
+      round = transition(round, 'reveal_elapsed', 100, 1, 17)!;
       expect(round.phase).toBe('LEADERBOARD');
       round = transition(round, 'master.next', 100, 1, 17)!;
     }

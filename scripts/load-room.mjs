@@ -254,7 +254,7 @@ async function run() {
         intervaloUltimoLoteAteFlushFinalMs: frames.at(-1).message.serverNow - regular.at(-1)?.message.serverNow,
       };
     }
-    await command(host, 'master.show_leaderboard');
+    await host.wait('leaderboard', message => message.revision === reveal.message.revision + 1);
   }
 
   return { joinSpanMs: Number(joinSpanMs.toFixed(2)), lobbyReadyMs: Number((lobbyReady.received - joinStart).toFixed(2)),

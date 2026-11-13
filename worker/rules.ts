@@ -1,10 +1,12 @@
 import type { Letter } from '../src/data/questions';
 
 export const QUESTION_MS = 30_000;
+export const REVEAL_MS = 3_000;
 export const MAX_PLAYERS = 150;
 
 export type Phase = 'LOBBY' | 'QUESTION_OPEN' | 'QUESTION_REVEAL' | 'LEADERBOARD' | 'FINAL_PODIUM';
-export type PhaseAction = 'master.start' | 'master.end_question' | 'master.show_leaderboard' | 'master.next' | 'close';
+export type MasterAction = 'master.start' | 'master.end_question' | 'master.next';
+export type PhaseAction = MasterAction | 'close' | 'reveal_elapsed';
 export type Round = { phase: Phase; questionIndex: number; openedAt: number | null; deadlineAt: number | null; revision: number };
 
 export function transition(round: Round, action: PhaseAction, now: number, players: number, questions: number): Round | null {
@@ -15,7 +17,7 @@ export function transition(round: Round, action: PhaseAction, now: number, playe
   if (round.phase === 'QUESTION_OPEN' && (action === 'close' || action === 'master.end_question')) {
     return { ...round, phase: 'QUESTION_REVEAL', revision };
   }
-  if (round.phase === 'QUESTION_REVEAL' && action === 'master.show_leaderboard') return { ...round, phase: 'LEADERBOARD', revision };
+  if (round.phase === 'QUESTION_REVEAL' && action === 'reveal_elapsed') return { ...round, phase: 'LEADERBOARD', revision };
   if (round.phase === 'LEADERBOARD' && action === 'master.next') {
     return round.questionIndex === questions ? { ...round, phase: 'FINAL_PODIUM', revision } : open(round.questionIndex + 1);
   }
