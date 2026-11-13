@@ -92,7 +92,15 @@ export function useGame() {
         : player === null ? 'O tempo acabou!' : mode === 'solo' ? 'Não foi dessa vez!' : 'Ninguém pontuou nesta rodada.';
       setFeedback({ winner: won ? player : null, selected: letter, message, correct: result.correct, explanation: result.explanation });
     }).catch(() => {
-      if (currentRound === round.current) setGradingError('A correção está indisponível. Tentando novamente ao fim do tempo.');
+      if (currentRound !== round.current) return;
+      if (mode === 'multi') {
+        setGradingError('A correção está indisponível. Tentando novamente ao fim do tempo.');
+      } else if (player === null) {
+        finished.current = true;
+        setTime(0);
+        sound('wrong', !muted);
+        setFeedback({ winner: null, selected: null, message: 'O tempo acabou!' });
+      }
     }).finally(() => { inFlight.delete(player); });
   }, [index, mode, muted, names]);
 

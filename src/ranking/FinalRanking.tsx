@@ -32,9 +32,10 @@ function RankingTable({ entries }: { entries: RankingEntry[] }) {
   );
 }
 
-export function FinalRanking({ rankingId, persisted = true, podium = false, children }: {
-  rankingId?: string; persisted?: boolean; podium?: boolean; children?: ReactNode;
+export function FinalRanking({ rankingId, persisted = true, podiumEntries, children }: {
+  rankingId?: string; persisted?: boolean; podiumEntries?: Pick<RankingEntry, 'rank' | 'name' | 'score'>[]; children?: ReactNode;
 }) {
+  const podium = podiumEntries !== undefined;
   const [result, setResult] = useState<RankingResult | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
@@ -65,9 +66,9 @@ export function FinalRanking({ rankingId, persisted = true, podium = false, chil
   return (
     <div className="master-results master-results-final">
       <h1 tabIndex={-1}>{podium ? 'Pódio final' : 'Ranking final'}</h1>
-      {podium && !!result?.entries.length && (
+      {!!podiumEntries?.length && (
         <ol className="master-podium" aria-label="Pódio">
-          {result.entries.slice(0, 3).map(entry => (
+          {podiumEntries.slice(0, 3).map(entry => (
             <li key={entry.rank} data-rank={entry.rank} className="master-panel">
               <span className="master-place">{entry.rank}º</span>
               <span className="master-entry-name">{entry.name}</span>

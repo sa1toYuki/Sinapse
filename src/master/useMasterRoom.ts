@@ -10,13 +10,14 @@ type Count = { answeredCount: number; eligibleCount: number };
 type Question = { questionId: number; text: string; options: Record<Letter, string> };
 type Open = Question & Count & { deadlineAt: number };
 type Reveal = { questionId: number; correct: Letter; counts: Record<Letter, number> };
+type FinalResult = { entries: Entry[]; rankingId: string; persisted: boolean };
 
 type Snapshot = Meta & { questionIndex: number } & (
   | { phase: 'LOBBY'; players: Player[] }
   | ({ phase: 'QUESTION_OPEN' } & Open)
   | { phase: 'QUESTION_REVEAL'; questionId: number }
   | { phase: 'LEADERBOARD'; entries: Entry[] }
-  | { phase: 'FINAL_PODIUM'; rankingId: string; persisted: boolean }
+  | ({ phase: 'FINAL_PODIUM' } & FinalResult)
 );
 
 type Frame = { v: 1 } & (
@@ -27,7 +28,7 @@ type Frame = { v: 1 } & (
   | (Meta & Count & { type: 'answer_count'; questionId: number })
   | (Meta & Reveal & { type: 'question_reveal' })
   | (Meta & { type: 'leaderboard'; entries: Entry[] })
-  | (Meta & { type: 'final_podium'; rankingId: string; persisted: boolean })
+  | (Meta & { type: 'final_podium' } & FinalResult)
   | (Meta & { type: 'persistence_status'; persisted: boolean })
   | { type: 'command_ack'; requestId: string }
   | { type: 'error'; requestId?: string; code: string }
@@ -38,7 +39,7 @@ type View = { revision: number; questionIndex: number } & (
   | ({ phase: 'QUESTION_OPEN'; expiresAt: number } & Question & Count)
   | { phase: 'QUESTION_REVEAL'; questionId: number; reveal?: Reveal; question?: Question }
   | { phase: 'LEADERBOARD'; entries: Entry[] }
-  | { phase: 'FINAL_PODIUM'; rankingId: string; persisted: boolean }
+  | ({ phase: 'FINAL_PODIUM' } & FinalResult)
 );
 
 export type MasterCommand = 'master.start' | 'master.end_question' | 'master.next';
@@ -81,7 +82,7 @@ function applySnapshot(previous: View | null, snapshot: Snapshot, receivedAt: nu
       return { phase, revision, questionIndex, questionId: snapshot.questionId,
         question: previous?.phase === 'QUESTION_OPEN' && previous.questionId === snapshot.questionId ? previous : undefined };
     case 'LEADERBOARD': return { phase, revision, questionIndex, entries: snapshot.entries };
-    case 'FINAL_PODIUM': return { phase, revision, questionIndex, rankingId: snapshot.rankingId, persisted: snapshot.persisted };
+    case 'FINAL_PODIUM': return { phase, revision, questionIndex, entries: snapshot.entries, rankingId: snapshot.rankingId, persisted: snapshot.persisted };
   }
 }
 
@@ -102,7 +103,7 @@ function applyEvent(view: View | null, message: Exclude<Frame, { type: 'resumed'
       return { phase: 'QUESTION_REVEAL', revision, questionIndex, questionId, question, reveal: { questionId, correct, counts } };
     }
     case 'leaderboard': return { phase: 'LEADERBOARD', revision, questionIndex, entries: message.entries };
-    case 'final_podium': return { phase: 'FINAL_PODIUM', revision, questionIndex, rankingId: message.rankingId, persisted: message.persisted };
+    case 'final_podium': return { phase: 'FINAL_PODIUM', revision, questionIndex, entries: message.entries, rankingId: message.rankingId, persisted: message.persisted };
     case 'persistence_status':
       return view.phase === 'FINAL_PODIUM' && view.revision === revision && message.persisted ? { ...view, persisted: true } : view;
     default: return view;

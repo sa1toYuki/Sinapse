@@ -24,7 +24,7 @@ npm run dev:worker
 
 Abra **Sala ao vivo** no menu ou acesse `/?master=1` para controlar a partida no telão. No celular, escaneie o QR code para abrir a tela PLAYER com o PIN preenchido (`/?pin=<pin>`) ou use **Entrar na sala** (`/?player=1`). O navegador guarda o token da última sala em `localStorage` para retomar a sessão. Os modos solo e de dois jogadores usam a correção de prática do Vite e também funcionam com `npm run build` e `npm run preview`.
 
-O MASTER mostra a classificação completa quando o D1 confirma a gravação. `/ranking` exibe a última partida concluída e o link **Ranking público** no pódio abre o resultado daquela partida. A classificação mostra o tempo acumulado em `MM:SS` e usa milissegundos no desempate.
+O MASTER mostra os três primeiros assim que abre o pódio. A classificação completa aparece quando o D1 confirma a gravação. `/ranking` exibe a última partida concluída e o link **Ranking público** no pódio abre o resultado daquela partida. A classificação mostra o tempo acumulado em `MM:SS` e usa milissegundos no desempate.
 
 ## Layout responsivo e validação
 

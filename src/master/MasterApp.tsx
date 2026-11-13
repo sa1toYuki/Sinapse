@@ -182,7 +182,7 @@ export function MasterApp() {
     );
   } else if (view.phase === 'FINAL_PODIUM') {
     content = (
-      <FinalRanking key={view.rankingId} rankingId={view.rankingId} persisted={view.persisted} podium>
+      <FinalRanking key={view.rankingId} rankingId={view.rankingId} persisted={view.persisted} podiumEntries={view.entries}>
         {connection === 'paused' ? (
           <button type="button" className="primary master-action" onClick={room.resume}>Retomar sala</button>
         ) : (

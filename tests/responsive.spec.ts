@@ -219,6 +219,20 @@ test("multi supports individual touch controls, locks and a complete game", asyn
   await audit(page, "multi-end", info);
 });
 
+test("solo reaches the result without an alert when grading stays unavailable", async ({ page }) => {
+  await page.route("**/api/local/grade", route => route.fulfill({ status: 503 }));
+  await start(page, "solo");
+  await page.locator(".answer").first().click();
+  const failed = page.waitForResponse(response => response.url().endsWith("/api/local/grade"));
+  await page.getByRole("button", { name: /CONFIRMAR RESPOSTA/ }).click();
+  expect((await failed).status()).toBe(503);
+  await page.clock.fastForward(31_000);
+  await expect(page.locator(".feedback")).toContainText("O tempo acabou!");
+  await expect(page.getByText(/A correção está indisponível/)).toHaveCount(0);
+  await page.getByRole("button", { name: /VER RESULTADO/ }).click();
+  await expect(page.locator(".result-card")).toBeVisible();
+});
+
 test("keyboard focus, reduced motion, zoom shortcuts and timeout remain available", async ({
   page,
 }, info) => {

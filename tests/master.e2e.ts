@@ -83,7 +83,16 @@ test('conduz a partida pelo Worker até o pódio e retoma a sala após recarrega
     await expect(correct).toContainText(question.options[question.correct]);
     await expect(page.getByRole('heading', { name: 'Top 5' })).toBeVisible();
   }
+  const rankingApi = /\/api\/ranking\?game=/;
+  await page.route(rankingApi, route => route.fulfill({ status: 503 }));
   await page.getByRole('button', { name: 'Ver pódio' }).click();
+  await expect(page.locator('.master-podium li')).toHaveCount(3);
+  await page.reload();
+  await expect(page.locator('.master-podium li')).toHaveCount(3);
+  const retryRanking = page.getByRole('button', { name: 'Tentar novamente' });
+  await expect(retryRanking).toBeVisible();
+  await page.unroute(rankingApi);
+  await retryRanking.click();
   await expect(page.getByRole('heading', { name: 'Pódio final' })).toBeVisible();
   await expect(page.locator('.master-podium li')).toHaveCount(3);
   await expect(page.locator('.master-podium [data-rank="1"]')).toContainText(names[0]);
