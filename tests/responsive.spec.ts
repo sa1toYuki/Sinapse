@@ -143,6 +143,8 @@ test("opening, menu, both modals and complete solo game reflow without clipping"
       })
       .click();
     await page.getByRole("button", { name: /CONFIRMAR RESPOSTA/ }).click();
+    await expect(page.locator(".answer.correct .answer-text")).toHaveText(question.options[question.correct]);
+    await expect(page.locator(".feedback.good p")).toHaveText(question.explanation);
     await audit(
       page,
       `solo-feedback-${index + 1}`,

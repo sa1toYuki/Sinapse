@@ -17,7 +17,7 @@ export type ProgressState = {
 type SaveFile = ProgressState & { version: number; questionBank: string };
 const VERSION = 1;
 const key = (mode: GameMode) => `sinapse:save:${mode}`;
-// The signature follows the public question set. Older saves used the full bank.
+// The signature follows the public question set.
 function signature(value: string): string {
   let hash = 2166136261;
   for (let i = 0; i < value.length; i++) hash = Math.imul(hash ^ value.charCodeAt(i), 16777619);
@@ -28,7 +28,7 @@ const isLetter = (x: unknown): x is Letter | null => x === null || (typeof x ===
 function valid(value: unknown, mode: GameMode): value is SaveFile {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const s = value as Record<string, unknown>;
-  if (s.version !== VERSION || (s.questionBank !== QUESTION_BANK && s.questionBank !== '8cc5a049') || s.mode !== mode) return false;
+  if (s.version !== VERSION || s.questionBank !== QUESTION_BANK || s.mode !== mode) return false;
   if (!Array.isArray(s.names) || s.names.length !== 2 || !s.names.every(n => typeof n === 'string' && n.length > 0 && n.length <= 20)) return false;
   if (!Number.isInteger(s.questionIndex) || (s.questionIndex as number) < 0 || (s.questionIndex as number) >= questions.length) return false;
   if (!Array.isArray(s.scores) || s.scores.length !== 2 || !s.scores.every(n => Number.isSafeInteger(n) && n >= 0)) return false;

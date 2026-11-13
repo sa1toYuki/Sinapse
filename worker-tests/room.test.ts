@@ -3,6 +3,7 @@ import { env, exports } from 'cloudflare:workers';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import type { Env } from '../worker';
 import { REVEAL_MS, type Round } from '../worker/rules';
+import { serverQuestions } from '../worker/questions.server';
 
 const bindings = env as Env & { TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1] };
 const worker = exports.default as Fetcher;
@@ -132,7 +133,7 @@ describe('sala no runtime Workers', () => {
     await host.request('room.sync');
     await host.command('master.end_question');
     await host.find(frame => frame.type === 'question_reveal');
-    expect(await first.find(frame => frame.type === 'question_reveal')).toMatchObject({ correct: 'B', myChoice: 'B' });
+    expect(await first.find(frame => frame.type === 'question_reveal')).toMatchObject({ correct: serverQuestions[0].correct, myChoice: 'B' });
     expect(await first.request('player.answer', { questionId: 1, choice: 'D' })).toMatchObject({ status: 'already_answered', choice: 'B', acceptedAt: answer.acceptedAt });
     expect(await second.request('player.answer', { questionId: 1, choice: 'E' })).toMatchObject({ code: 'QUESTION_CLOSED' });
     const reconnected = await connect(room.pin);

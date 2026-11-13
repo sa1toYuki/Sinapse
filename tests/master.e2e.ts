@@ -7,6 +7,13 @@ async function fits(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 }
 
+async function answer(page: Page, question: (typeof serverQuestions)[number]) {
+  await page.evaluate(({ questionId, choice }) => {
+    const { testPlayers } = window as Window & { testPlayers?: WebSocket[] };
+    testPlayers![0].send(JSON.stringify({ v: 1, type: 'player.answer', requestId: crypto.randomUUID(), questionId, choice }));
+  }, { questionId: question.id, choice: question.correct });
+}
+
 test('conduz a partida pelo Worker até o pódio e retoma a sala após recarregar', async ({ page, context }, info) => {
   test.setTimeout(120_000);
   await page.goto('/');
@@ -49,10 +56,7 @@ test('conduz a partida pelo Worker até o pódio e retoma a sala após recarrega
   await expect(page.locator('.master-answers .correct')).toHaveCount(0);
   await expect(page.getByRole('timer').locator('strong')).toHaveText(/^(30|29)$/);
   await expect(page.getByRole('timer').locator('strong')).not.toHaveText('30');
-  await players.evaluate(({ questionId, choice }) => {
-    const { testPlayers } = window as Window & { testPlayers?: WebSocket[] };
-    testPlayers![0].send(JSON.stringify({ v: 1, type: 'player.answer', requestId: crypto.randomUUID(), questionId, choice }));
-  }, { questionId: serverQuestions[0].id, choice: serverQuestions[0].correct });
+  await answer(players, serverQuestions[0]);
   await expect(page.locator('.master-count strong')).toHaveText('1 / 6');
   await fits(page);
   await page.screenshot({ path: info.outputPath('pergunta.png'), fullPage: true });
@@ -73,7 +77,10 @@ test('conduz a partida pelo Worker até o pódio e retoma a sala após recarrega
   for (const question of serverQuestions.slice(1)) {
     await page.getByRole('button', { name: 'Próxima pergunta' }).click();
     await expect(page.getByRole('heading', { name: question.text })).toBeVisible();
+    await answer(players, question);
+    await expect(page.locator('.master-count strong')).toHaveText('1 / 6');
     await page.getByRole('button', { name: 'Encerrar pergunta' }).click();
+    await expect(correct).toContainText(question.options[question.correct]);
     await expect(page.getByRole('heading', { name: 'Top 5' })).toBeVisible();
   }
   await page.getByRole('button', { name: 'Ver pódio' }).click();
@@ -83,6 +90,8 @@ test('conduz a partida pelo Worker até o pódio e retoma a sala após recarrega
   const ranking = page.getByRole('table', { name: 'Ranking final' });
   await expect(ranking.locator('tbody tr')).toHaveCount(6);
   await expect(ranking.locator('tbody tr').first().getByRole('rowheader')).toHaveText(names[0]);
+  const winner = ranking.locator('tbody tr').first();
+  expect(Number((await winner.getByRole('cell').nth(1).innerText()).replace(/\D/g, ''))).toBeGreaterThanOrEqual(17 * 500);
   await expect(ranking.getByRole('cell', { name: '08:30', exact: true })).toHaveCount(5);
   await fits(page);
   await page.screenshot({ path: info.outputPath('podio.png'), fullPage: true });
